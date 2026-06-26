@@ -3,8 +3,10 @@ Local web app to fetch Instagram Reel / Post metrics using instagrapi.
 
 Project layout
 --------------
-    test.py       -> this file (Flask backend, login, scraping logic)
-    index.html    -> the frontend (HTML + CSS + JS in one file), served as-is
+    test.py              -> Flask backend, login, scraping logic
+    index.html           -> frontend markup
+    static/css/styles.css
+    static/js/app.js
 
 Why instagrapi (and not instaloader)?
 -------------------------------------
@@ -67,12 +69,16 @@ from instagrapi.exceptions import (
 )
 from instagrapi.extractors import extract_comment
 
-app = Flask(__name__)
-
 # Project paths (computed once at import time).
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 SESSION_DIR = os.path.join(PROJECT_DIR, ".ig_sessions")
 os.makedirs(SESSION_DIR, exist_ok=True)
+
+app = Flask(
+    __name__,
+    static_folder=os.path.join(PROJECT_DIR, "static"),
+    static_url_path="/static",
+)
 
 # In-memory cache of logged-in clients. One Client per Instagram username.
 # We keep these alive between requests so we don't re-login every time the
