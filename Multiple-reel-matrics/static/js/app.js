@@ -1,12 +1,65 @@
+/**
+ * Reel Metrics — frontend for the local Flask app (test.py).
+ *
+ * Tabs: single reel, bulk CSV, profile reels, account matrices (profile stats only).
+ * Bulk/profile fetches use Server-Sent Events for live progress.
+ */
+
+// =============================================================================
+// Utilities
+// =============================================================================
+
 const fmt = (n) => {
   if (n === null || n === undefined || n === '') return '-';
   const v = Number(n);
   return Number.isFinite(v) ? v.toLocaleString() : String(n);
 };
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+const esc = (s) => String(s ?? '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 
-// ---- Theme toggle ----
+/** How many comments are stored on a reel row (fetched count or array length). */
+function commentsCount(reel) {
+  return reel?.comments_fetched ?? (reel?.reel_comments?.length || 0);
+}
+
+function csvEscape(val) {
+  const s = val == null ? '' : String(val);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function timestampForFilename() {
+  return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+}
+
+function downloadCsv(csvText, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csvText], { type: 'text/csv;charset=utf-8;' }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function truncateUrl(url, max = 72) {
+  const s = String(url || '');
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+function formatCommentUser(c) {
+  if (!c.username) return '—';
+  const name = c.full_name ? ` <span>(${esc(c.full_name)})</span>` : '';
+  return `<span class="comment-user">@${esc(c.username)}${name}</span>`;
+}
+
+function commentRowHtml(c, index, { replyClass = '' } = {}) {
+  const prefix = c.is_reply ? '↳ ' : '';
+  const rowClass = c.is_reply ? replyClass : '';
+  return `<tr class="${rowClass}"><td>${index}</td><td>${formatCommentUser(c)}</td><td>${esc(c.date) || '—'}</td><td class="num">${fmt(c.likes)}</td><td class="comment-text">${prefix}${esc(c.text)}</td></tr>`;
+}
+
+// =============================================================================
+// Theme
+// =============================================================================
+
 const html = document.documentElement;
 const THEME_KEY = 'reel-metrics-theme';
 
@@ -15,21 +68,21 @@ function applyTheme(theme) {
   localStorage.setItem(THEME_KEY, theme);
 }
 
-// Load saved preference (or system default)
-const saved = localStorage.getItem(THEME_KEY);
-if (saved === 'light' || saved === 'dark') {
-  applyTheme(saved);
+const savedTheme = localStorage.getItem(THEME_KEY);
+if (savedTheme === 'light' || savedTheme === 'dark') {
+  applyTheme(savedTheme);
 } else {
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(prefersDark ? 'dark' : 'light');
+  applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }
 
 $('theme-toggle').addEventListener('click', () => {
-  const current = html.getAttribute('data-theme');
-  applyTheme(current === 'dark' ? 'light' : 'dark');
+  applyTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 });
 
-// ---- Rest of original JS ----
+// =============================================================================
+// Shared state & tab configs
+// =============================================================================
+
 let bulkResults = [];
 let bulkErrors = [];
 let singleComments = [];
@@ -46,6 +99,66 @@ const bulkProgressEls = {
   label: $('progress-label'),
 };
 
+/** Profile Reels tab — streams reels via SSE. */
+const profileStreamTab = {
+  results: [],
+  errors: [],
+  meta: null,
+  context: 'profile',
+  btnLabel: 'Fetch profile reels',
+  csvPrefix: 'profile-reels',
+  progressEls: {
+    wrap: $('progress-profile'),
+    fill: $('progress-profile-fill'),
+    count: $('progress-profile-count'),
+    pct: $('progress-profile-pct'),
+    label: $('progress-profile-label'),
+  },
+  els: {
+    status: $('status-profile'),
+    results: $('results-profile'),
+    tbody: $('reels-tbody'),
+    errors: $('profile-errors'),
+    btn: $('go-profile'),
+    count: $('s_count'),
+    failed: $('p_failed'),
+    views: $('s_views'),
+    likes: $('s_likes'),
+    comments: $('s_comments'),
+    pcCount: $('pc_count'),
+  },
+  getTarget: () => $('target').value.trim(),
+  getLimit: () => $('limit').value.trim(),
+  resolveTarget(raw) {
+    if (!raw) return { ok: false, msg: 'Please enter an Instagram username or profile URL.' };
+    return { ok: true, value: raw };
+  },
+};
+
+/** Account Matrices tab — profile stats only (no reels). */
+const accountMatricesEls = {
+  status: $('status-matrices'),
+  results: $('results-matrices'),
+  btn: $('go-matrices'),
+  username: $('a_username'),
+  fullname: $('a_fullname'),
+  followers: $('a_followers'),
+  following: $('a_following'),
+  posts: $('a_posts'),
+  totalReels: $('a_total_reels'),
+  oldestReel: $('a_oldest_reel'),
+  oldestReelFull: $('a_oldest_reel_full'),
+  latestReel: $('a_latest_reel'),
+  latestReelFull: $('a_latest_reel_full'),
+  verified: $('a_verified'),
+  private: $('a_private'),
+  business: $('a_business'),
+  category: $('a_category'),
+  biography: $('a_biography'),
+  external: $('a_external'),
+  profileUrl: $('a_profile_url'),
+};
+
 function parseInstagramUsernameOnly(value) {
   const raw = (value || '').trim();
   if (!raw) return null;
@@ -55,109 +168,9 @@ function parseInstagramUsernameOnly(value) {
   return username;
 }
 
-const profileStreamTabs = {
-  profile: {
-    results: [],
-    errors: [],
-    meta: null,
-    context: 'profile',
-    btnLabel: 'Fetch profile reels',
-    csvPrefix: 'profile-reels',
-    progressEls: {
-      wrap: $('progress-profile'),
-      fill: $('progress-profile-fill'),
-      count: $('progress-profile-count'),
-      pct: $('progress-profile-pct'),
-      label: $('progress-profile-label'),
-    },
-    els: {
-      status: $('status-profile'),
-      results: $('results-profile'),
-      tbody: $('reels-tbody'),
-      errors: $('profile-errors'),
-      btn: $('go-profile'),
-      username: $('p_username'),
-      fullname: $('p_fullname'),
-      followers: $('p_followers'),
-      following: $('p_following'),
-      posts: $('p_posts'),
-      oldest: $('p_oldest'),
-      oldestFull: $('p_oldest_full'),
-      latest: $('p_latest'),
-      latestFull: $('p_latest_full'),
-      span: $('p_span'),
-      count: $('s_count'),
-      failed: $('p_failed'),
-      views: $('s_views'),
-      likes: $('s_likes'),
-      comments: $('s_comments'),
-      pcCount: $('pc_count'),
-    },
-    getTarget: () => $('target').value.trim(),
-    getLimit: () => $('limit').value.trim(),
-    resolveTarget(raw) {
-      if (!raw) {
-        return { ok: false, msg: 'Please enter an Instagram username or profile URL.' };
-      }
-      return { ok: true, value: raw };
-    },
-  },
-  matrices: {
-    results: [],
-    errors: [],
-    meta: null,
-    context: 'matrices',
-    btnLabel: 'Fetch account matrices',
-    csvPrefix: 'account-matrices',
-    progressEls: {
-      wrap: $('progress-matrices'),
-      fill: $('progress-matrices-fill'),
-      count: $('progress-matrices-count'),
-      pct: $('progress-matrices-pct'),
-      label: $('progress-matrices-label'),
-    },
-    els: {
-      status: $('status-matrices'),
-      results: $('results-matrices'),
-      tbody: $('matrices-tbody'),
-      errors: $('matrices-errors'),
-      btn: $('go-matrices'),
-      username: $('a_username'),
-      fullname: $('a_fullname'),
-      followers: $('a_followers'),
-      following: $('a_following'),
-      posts: $('a_posts'),
-      oldest: $('a_oldest'),
-      oldestFull: $('a_oldest_full'),
-      latest: $('a_latest'),
-      latestFull: $('a_latest_full'),
-      span: $('a_span'),
-      count: $('a_count'),
-      failed: $('a_failed'),
-      views: $('a_views'),
-      likes: $('a_likes'),
-      comments: $('a_comments'),
-      pcCount: $('ac_count'),
-    },
-    getTarget: () => $('target-matrices').value.trim(),
-    getLimit: () => $('limit-matrices').value.trim(),
-    resolveTarget(raw) {
-      const username = parseInstagramUsernameOnly(raw);
-      if (!username) {
-        return {
-          ok: false,
-          msg: 'Please enter a valid Instagram username (e.g. @username). Profile URLs and reel links are not accepted.',
-        };
-      }
-      return { ok: true, value: username };
-    },
-  },
-};
-
-function csvEscape(val) {
-  const s = val == null ? '' : String(val);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
+// =============================================================================
+// CSV export
+// =============================================================================
 
 function buildReelsCommentsCsv(reels) {
   const headers = [
@@ -171,7 +184,7 @@ function buildReelsCommentsCsv(reels) {
     if (reelIndex > 0) lines.push('');
 
     const url = reel.url || reel.reel_url || getReelUrl(reel);
-    const fetched = reel.comments_fetched ?? (reel.reel_comments?.length || 0);
+    const fetched = commentsCount(reel);
     const reelRow = [url, reel.shortcode ?? '', reel.date ?? '', reel.views ?? '', reel.likes ?? '', reel.comments ?? '', fetched];
     const comments = reel.reel_comments || [];
 
@@ -196,40 +209,26 @@ function buildReelsCommentsCsv(reels) {
   return lines.join('\n');
 }
 
-function buildResultsCsv(rows) {
-  return buildReelsCommentsCsv(rows);
-}
-
 function downloadBulkCsv() {
   if (!bulkResults.length) return;
-  const blob = new Blob([buildResultsCsv(bulkResults)], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `reel-metrics-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  downloadCsv(buildReelsCommentsCsv(bulkResults), `reel-metrics-${timestampForFilename()}.csv`);
+}
+
+function downloadProfileCsv() {
+  if (!profileStreamTab.results.length) return;
+  const username = profileStreamTab.meta?.username || 'profile';
+  downloadCsv(
+    buildReelsCommentsCsv(profileStreamTab.results),
+    `${profileStreamTab.csvPrefix}-${username}-${timestampForFilename()}.csv`,
+  );
 }
 
 $('download-csv').addEventListener('click', downloadBulkCsv);
+$('download-profile-csv').addEventListener('click', downloadProfileCsv);
 
-function buildProfileReelsCsv(reels) {
-  return buildReelsCommentsCsv(reels);
-}
-
-function downloadProfileStreamCsv(tabKey) {
-  const tab = profileStreamTabs[tabKey];
-  if (!tab?.results.length) return;
-  const username = tab.meta?.username || tabKey;
-  const blob = new Blob([buildProfileReelsCsv(tab.results)], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${tab.csvPrefix}-${username}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-$('download-profile-csv').addEventListener('click', () => downloadProfileStreamCsv('profile'));
-$('download-matrices-csv').addEventListener('click', () => downloadProfileStreamCsv('matrices'));
+// =============================================================================
+// Error summaries & table rows
+// =============================================================================
 
 function renderErrorSummary(el, errors, title) {
   if (!errors.length) {
@@ -264,11 +263,40 @@ function updateBulkSummaryCounts(total, successful, failed) {
   $('b_failed').textContent = failed ?? bulkErrors.length;
 }
 
+function getReelUrl(reel) {
+  if (reel?.url || reel?.reel_url) return reel.url || reel.reel_url;
+  const shortcode = reel?.shortcode;
+  if (!shortcode || shortcode === '?') return '';
+  const pt = (reel.product_type || '').toLowerCase();
+  let segment = 'p';
+  if (pt === 'clips') segment = 'reel';
+  else if (pt === 'igtv') segment = 'tv';
+  return `https://www.instagram.com/${segment}/${shortcode}/`;
+}
+
+function buildCommentActionButton(reel, index, context) {
+  const fetched = commentsCount(reel);
+  const shortcode = reel.shortcode || '';
+  const url = getReelUrl(reel);
+  if (fetched > 0) {
+    return `<button type="button" class="btn-show-comments" data-count="${fetched}" data-index="${index}" data-context="${context}">Show Comments (${fetched})</button>`;
+  }
+  if (context === 'bulk' && reel.status !== 'Success') return '—';
+  if (!shortcode && !url) return '—';
+  return `<button type="button" class="btn-load-comments" data-shortcode="${esc(shortcode)}" data-url="${esc(url)}" data-index="${index}" data-context="${context}">Load Comments</button>`;
+}
+
+function buildCommentsDetailRow(colspan, comments, loaded) {
+  const panel = loaded
+    ? buildReelCommentsPanel(comments)
+    : '<div class="reel-comments-panel"><p class="reel-comments-empty">Click <strong>Load Comments</strong> to fetch comments for this reel.</p></div>';
+  return `<td colspan="${colspan}">${panel}</td>`;
+}
+
 function appendBulkRow(row, index) {
   const link = row.url || row.reel_url;
-  const fetched = row.comments_fetched ?? (row.reel_comments?.length || 0);
+  const fetched = commentsCount(row);
   const comments = row.reel_comments || [];
-  const loaded = fetched > 0;
   const tbody = $('bulk-tbody');
   const mainTr = document.createElement('tr');
   mainTr.className = 'reel-row';
@@ -276,8 +304,45 @@ function appendBulkRow(row, index) {
   tbody.appendChild(mainTr);
   const detailTr = document.createElement('tr');
   detailTr.className = 'reel-comments-row';
-  detailTr.innerHTML = buildCommentsDetailRow(BULK_TABLE_COLSPAN, comments, loaded);
+  detailTr.innerHTML = buildCommentsDetailRow(BULK_TABLE_COLSPAN, comments, fetched > 0);
   tbody.appendChild(detailTr);
+}
+
+function appendProfileStreamReelRow(tab, reel, index) {
+  const tbody = tab.els.tbody;
+  tbody.querySelector('.empty-row')?.remove();
+
+  const fetched = commentsCount(reel);
+  const comments = reel.reel_comments || [];
+  const url = getReelUrl(reel);
+
+  const mainTr = document.createElement('tr');
+  mainTr.className = 'reel-row';
+  mainTr.innerHTML = `<td>${index + 1}</td><td>${reel.date || '-'}</td><td><a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(reel.shortcode)}</a></td><td class="num">${fmt(reel.views)}</td><td class="num">${fmt(reel.likes)}</td><td class="num">${fmt(reel.comments)}</td><td class="num">${fmt(fetched)}</td><td>${esc((reel.caption || '').slice(0, 200))}</td><td>${buildCommentActionButton(reel, index, tab.context)}</td>`;
+  tbody.appendChild(mainTr);
+
+  const detailTr = document.createElement('tr');
+  detailTr.className = 'reel-comments-row';
+  detailTr.innerHTML = buildCommentsDetailRow(PROFILE_TABLE_COLSPAN, comments, fetched > 0);
+  tbody.appendChild(detailTr);
+}
+
+// =============================================================================
+// Progress bars & stream UI init
+// =============================================================================
+
+function setStreamProgress(els, current, total, percent, label) {
+  const pct = Math.max(0, Math.min(100, percent ?? (total ? Math.round((current * 100) / total) : 0)));
+  els.fill.style.width = `${pct}%`;
+  els.count.textContent = total ? `${current} / ${total}` : `${current}`;
+  els.pct.textContent = `${pct}%`;
+  if (label) els.label.textContent = label;
+}
+
+function clearStreamProgress(els) {
+  els.fill.style.width = '0%';
+  els.count.textContent = '0 / 0';
+  els.pct.textContent = '0%';
 }
 
 function initBulkStreamUI(total) {
@@ -291,39 +356,20 @@ function initBulkStreamUI(total) {
   setStreamProgress(bulkProgressEls, 0, total, 0, `Found ${total} URL${total === 1 ? '' : 's'} in CSV`);
 }
 
-function setProfileStreamHeader(tab, profile, dateRange) {
+function setProfileStreamMeta(tab, profile) {
   tab.meta = profile || null;
-  if (!profile) return;
-  const { els } = tab;
-  els.username.textContent = profile.username || '-';
-  els.fullname.textContent = profile.full_name || '-';
-  els.followers.textContent = fmt(profile.followers);
-  els.following.textContent = fmt(profile.following);
-  els.posts.textContent = fmt(profile.posts);
-  if (dateRange) setProfileStreamDateRange(tab, dateRange);
-}
-
-function setProfileStreamDateRange(tab, dr) {
-  const hasDates = dr && dr.count > 0;
-  const { els } = tab;
-  els.oldest.textContent = hasDates ? dr.oldest_date : '—';
-  els.oldestFull.textContent = hasDates ? `(${dr.oldest_display})` : '';
-  els.latest.textContent = hasDates ? dr.newest_date : '—';
-  els.latestFull.textContent = hasDates ? `(${dr.newest_display})` : '';
-  els.span.textContent = hasDates
-    ? (dr.span_days === 0
-      ? `Single day · ${dr.count} reel${dr.count === 1 ? '' : 's'} analyzed`
-      : `${dr.span_days.toLocaleString()} day${dr.span_days === 1 ? '' : 's'} · ${dr.count} reels analyzed`)
-    : '—';
 }
 
 function updateProfileStreamSummary(tab) {
-  let totViews = 0, totLikes = 0, totComments = 0, totFetched = 0;
+  let totViews = 0;
+  let totLikes = 0;
+  let totComments = 0;
+  let totFetched = 0;
   tab.results.forEach((reel) => {
     totViews += reel.views || 0;
     totLikes += reel.likes || 0;
     totComments += reel.comments || 0;
-    totFetched += reel.comments_fetched ?? (reel.reel_comments?.length || 0);
+    totFetched += commentsCount(reel);
   });
   const { els } = tab;
   els.count.textContent = tab.results.length;
@@ -332,41 +378,6 @@ function updateProfileStreamSummary(tab) {
   els.likes.textContent = fmt(totLikes);
   els.comments.textContent = fmt(totComments);
   els.pcCount.textContent = fmt(totFetched);
-}
-
-function getReelUrl(reel) {
-  if (reel?.url || reel?.reel_url) return reel.url || reel.reel_url;
-  const shortcode = reel?.shortcode;
-  if (!shortcode || shortcode === '?') return '';
-  const pt = (reel.product_type || '').toLowerCase();
-  let segment = 'p';
-  if (pt === 'clips') segment = 'reel';
-  else if (pt === 'igtv') segment = 'tv';
-  return `https://www.instagram.com/${segment}/${shortcode}/`;
-}
-
-function appendProfileStreamReelRow(tab, reel, index) {
-  const tbody = tab.els.tbody;
-  const emptyRow = tbody.querySelector('.empty-row');
-  if (emptyRow) emptyRow.remove();
-
-  const fetched = reel.comments_fetched ?? (reel.reel_comments?.length || 0);
-  const comments = reel.reel_comments || [];
-  const loaded = fetched > 0;
-  const url = getReelUrl(reel);
-  const linkCell = tab.context === 'matrices'
-    ? `<td class="url-cell"><a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(url)}</a></td>`
-    : `<td><a href="${esc(url)}" target="_blank" rel="noreferrer">${esc(reel.shortcode)}</a></td>`;
-
-  const mainTr = document.createElement('tr');
-  mainTr.className = 'reel-row';
-  mainTr.innerHTML = `<td>${index + 1}</td><td>${reel.date || '-'}</td>${linkCell}<td class="num">${fmt(reel.views)}</td><td class="num">${fmt(reel.likes)}</td><td class="num">${fmt(reel.comments)}</td><td class="num">${fmt(fetched)}</td><td>${esc((reel.caption || '').slice(0, 200))}</td><td>${buildCommentActionButton(reel, index, tab.context)}</td>`;
-  tbody.appendChild(mainTr);
-
-  const detailTr = document.createElement('tr');
-  detailTr.className = 'reel-comments-row';
-  detailTr.innerHTML = buildCommentsDetailRow(PROFILE_TABLE_COLSPAN, comments, loaded);
-  tbody.appendChild(detailTr);
 }
 
 function initProfileStreamUI(tab, expected) {
@@ -390,12 +401,16 @@ function initProfileStreamUI(tab, expected) {
   );
 }
 
-document.querySelectorAll('.tab').forEach(t => {
+// =============================================================================
+// Tabs & UI helpers
+// =============================================================================
+
+document.querySelectorAll('.tab').forEach((t) => {
   t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach((x) => x.classList.remove('active'));
     t.classList.add('active');
-    $('pane-' + t.dataset.tab).classList.add('active');
+    $(`pane-${t.dataset.tab}`).classList.add('active');
   });
 });
 
@@ -410,7 +425,7 @@ function setBtnLoading(btn, loading, idleText, loadingText) {
 }
 
 function showStatus(el, kind, msg) {
-  el.className = 'status ' + (kind ? (kind + ' show') : '');
+  el.className = `status ${kind ? `${kind} show` : ''}`;
   el.textContent = msg || '';
 }
 
@@ -423,20 +438,27 @@ async function parseJsonResponse(r) {
   return r.json();
 }
 
-function setStreamProgress(els, current, total, percent, label) {
-  const pct = Math.max(0, Math.min(100, percent ?? (total ? Math.round(current * 100 / total) : 0)));
-  els.fill.style.width = pct + '%';
-  els.count.textContent = total ? `${current} / ${total}` : `${current}`;
-  els.pct.textContent = pct + '%';
-  if (label) els.label.textContent = label;
+function loginPayload() {
+  return { username: $('username').value.trim(), password: $('password').value };
 }
 
-function truncateUrl(url, max = 72) {
-  const s = String(url || '');
-  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+// =============================================================================
+// Server-Sent Events (bulk CSV + profile streams)
+// =============================================================================
+
+/** Parse one SSE frame into { event, data } or null. */
+function parseSseFrame(frame) {
+  if (!frame.trim()) return null;
+  let event = 'message';
+  let data = '';
+  for (const line of frame.split('\n')) {
+    if (line.startsWith('event: ')) event = line.slice(7).trim();
+    else if (line.startsWith('data: ')) data = line.slice(6);
+  }
+  return data ? { event, data: JSON.parse(data) } : null;
 }
 
-async function consumeBulkStream(response, onEvent) {
+async function consumeEventStream(response, onEvent) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -447,87 +469,78 @@ async function consumeBulkStream(response, onEvent) {
     const frames = buffer.split('\n\n');
     buffer = frames.pop() || '';
     for (const frame of frames) {
-      if (!frame.trim()) continue;
-      let event = 'message', data = '';
-      for (const line of frame.split('\n')) {
-        if (line.startsWith('event: ')) event = line.slice(7).trim();
-        else if (line.startsWith('data: ')) data = line.slice(6);
-      }
-      if (data) onEvent(event, JSON.parse(data));
+      const parsed = parseSseFrame(frame);
+      if (parsed) onEvent(parsed.event, parsed.data);
     }
   }
-  if (buffer.trim()) {
-    let event = 'message', data = '';
-    for (const line of buffer.split('\n')) {
-      if (line.startsWith('event: ')) event = line.slice(7).trim();
-      else if (line.startsWith('data: ')) data = line.slice(6);
-    }
-    if (data) onEvent(event, JSON.parse(data));
-  }
+  const tail = parseSseFrame(buffer);
+  if (tail) onEvent(tail.event, tail.data);
 }
 
-function buildCommentActionButton(reel, index, context) {
-  const fetched = reel.comments_fetched ?? (reel.reel_comments?.length || 0);
-  const shortcode = reel.shortcode || '';
-  const url = getReelUrl(reel);
-  if (fetched > 0) {
-    return `<button type="button" class="btn-show-comments" data-count="${fetched}" data-index="${index}" data-context="${context}">Show Comments (${fetched})</button>`;
+// =============================================================================
+// Comments (inline tables + single-reel tab)
+// =============================================================================
+
+function buildReelCommentsPanel(comments) {
+  if (!comments?.length) {
+    return '<div class="reel-comments-panel"><p class="reel-comments-empty">No comments found for this reel.</p></div>';
   }
-  if (context === 'bulk' && reel.status !== 'Success') return '—';
-  if (!shortcode && !url) return '—';
-  return `<button type="button" class="btn-load-comments" data-shortcode="${esc(shortcode)}" data-url="${esc(url)}" data-index="${index}" data-context="${context}">Load Comments</button>`;
+  const rows = comments.map((c, i) => commentRowHtml(c, i + 1, { replyClass: 'reel-comment-reply' })).join('');
+  return `<div class="reel-comments-panel">
+    <div class="reel-comments-meta">${comments.length} comment${comments.length === 1 ? '' : 's'}</div>
+    <div class="table-wrap reel-comments-table-wrap">
+      <table class="reel-comments-table">
+        <thead><tr><th>#</th><th>User</th><th>Date</th><th class="num">Likes</th><th>Comment</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
-function buildCommentsDetailRow(colspan, comments, loaded) {
-  const panel = loaded
-    ? buildReelCommentsPanel(comments)
-    : '<div class="reel-comments-panel"><p class="reel-comments-empty">Click <strong>Load Comments</strong> to fetch comments for this reel.</p></div>';
-  return `<td colspan="${colspan}">${panel}</td>`;
+function toggleReelComments(btn) {
+  const mainRow = btn.closest('tr');
+  const detailRow = mainRow?.nextElementSibling;
+  if (!detailRow?.classList.contains('reel-comments-row')) return;
+  const open = detailRow.classList.toggle('show');
+  const count = btn.dataset.count || '0';
+  btn.textContent = open ? `Hide Comments (${count})` : `Show Comments (${count})`;
+  btn.classList.toggle('active', open);
+  if (open) detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function fetchReelComments(shortcodeOrUrl) {
-  const payload = {
-    username: $('username').value.trim(),
-    password: $('password').value,
-    shortcode: shortcodeOrUrl,
-  };
   const r = await fetch('/api/reel_comments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...loginPayload(), shortcode: shortcodeOrUrl }),
   });
   const data = await parseJsonResponse(r);
-  if (!r.ok || !data.ok) {
-    throw new Error(data.error || `HTTP ${r.status}`);
-  }
+  if (!r.ok || !data.ok) throw new Error(data.error || `HTTP ${r.status}`);
   return data;
 }
 
 function getStreamTabResults(context) {
   if (context === 'bulk') return bulkResults;
-  return profileStreamTabs[context]?.results || null;
+  if (context === 'profile') return profileStreamTab.results;
+  return null;
 }
 
 function updateProfileStreamCommentTotals(tab) {
   let totFetched = 0;
-  tab.results.forEach((r) => {
-    totFetched += r.comments_fetched ?? (r.reel_comments?.length || 0);
-  });
+  tab.results.forEach((r) => { totFetched += commentsCount(r); });
   tab.els.pcCount.textContent = fmt(totFetched);
 }
 
 async function handleLoadComments(btn) {
   const index = parseInt(btn.dataset.index, 10);
   const context = btn.dataset.context;
-  const shortcode = btn.dataset.shortcode;
-  const url = btn.dataset.url;
   const reelRef = context === 'bulk' ? bulkResults[index] : getStreamTabResults(context)?.[index];
 
   btn.disabled = true;
   btn.textContent = 'Loading…';
 
   try {
-    const data = await fetchReelComments(shortcode || url);
+    const data = await fetchReelComments(btn.dataset.shortcode || btn.dataset.url);
     const comments = data.reel_comments || [];
     const fetched = data.comments_fetched ?? comments.length;
 
@@ -556,9 +569,8 @@ async function handleLoadComments(btn) {
     showBtn.textContent = `Hide Comments (${fetched})`;
     btn.replaceWith(showBtn);
 
-    if (context === 'profile' || context === 'matrices') {
-      const tab = profileStreamTabs[context];
-      updateProfileStreamCommentTotals(tab);
+    if (context === 'profile') {
+      updateProfileStreamCommentTotals(profileStreamTab);
       const fetchedCell = mainRow?.querySelector('td:nth-child(7)');
       if (fetchedCell) fetchedCell.textContent = fmt(fetched);
     } else if (context === 'bulk') {
@@ -568,7 +580,7 @@ async function handleLoadComments(btn) {
   } catch (err) {
     btn.disabled = false;
     btn.textContent = 'Load Comments';
-    alert('Failed to load comments: ' + err.message);
+    alert(`Failed to load comments: ${err.message}`);
   }
 }
 
@@ -582,47 +594,8 @@ function handleReelTableClick(e) {
   if (showBtn) toggleReelComments(showBtn);
 }
 
-function buildReelCommentsPanel(comments) {
-  if (!comments || !comments.length) {
-    return '<div class="reel-comments-panel"><p class="reel-comments-empty">No comments found for this reel.</p></div>';
-  }
-  const rows = comments.map((c, i) => {
-    const userLabel = c.username
-      ? `<span class="comment-user">@${esc(c.username)}${c.full_name ? ` <span>(${esc(c.full_name)})</span>` : ''}</span>`
-      : '—';
-    const prefix = c.is_reply ? '↳ ' : '';
-    const rowClass = c.is_reply ? 'reel-comment-reply' : '';
-    return `<tr class="${rowClass}"><td>${i + 1}</td><td>${userLabel}</td><td>${esc(c.date) || '—'}</td><td class="num">${fmt(c.likes)}</td><td class="comment-text">${prefix}${esc(c.text)}</td></tr>`;
-  }).join('');
-  return `<div class="reel-comments-panel">
-    <div class="reel-comments-meta">${comments.length} comment${comments.length === 1 ? '' : 's'}</div>
-    <div class="table-wrap reel-comments-table-wrap">
-      <table class="reel-comments-table">
-        <thead><tr><th>#</th><th>User</th><th>Date</th><th class="num">Likes</th><th>Comment</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-function toggleReelComments(btn) {
-  const mainRow = btn.closest('tr');
-  const detailRow = mainRow?.nextElementSibling;
-  if (!detailRow?.classList.contains('reel-comments-row')) return;
-  const open = detailRow.classList.toggle('show');
-  const count = btn.dataset.count || '0';
-  btn.textContent = open ? `Hide Comments (${count})` : `Show Comments (${count})`;
-  btn.classList.toggle('active', open);
-  if (open) detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
 $('reels-tbody').addEventListener('click', handleReelTableClick);
-$('matrices-tbody').addEventListener('click', handleReelTableClick);
 $('bulk-tbody').addEventListener('click', handleReelTableClick);
-
-function countProfileComments(reels) {
-  return (reels || []).reduce((sum, r) => sum + (r.reel_comments?.length || 0), 0);
-}
 
 function renderCommentsPage() {
   const tbody = $('comments-tbody');
@@ -635,8 +608,7 @@ function renderCommentsPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(singleComments.length / COMMENTS_PER_PAGE));
-  if (commentsPage > totalPages) commentsPage = totalPages;
-  if (commentsPage < 1) commentsPage = 1;
+  commentsPage = Math.min(Math.max(commentsPage, 1), totalPages);
 
   const start = (commentsPage - 1) * COMMENTS_PER_PAGE;
   const pageItems = singleComments.slice(start, start + COMMENTS_PER_PAGE);
@@ -644,11 +616,8 @@ function renderCommentsPage() {
   pageItems.forEach((c, i) => {
     const tr = document.createElement('tr');
     if (c.is_reply) tr.classList.add('comment-reply');
-    const userLabel = c.username
-      ? `<span class="comment-user">@${esc(c.username)}${c.full_name ? ` <span>(${esc(c.full_name)})</span>` : ''}</span>`
-      : '—';
     const prefix = c.is_reply ? '↳ ' : '';
-    tr.innerHTML = `<td>${start + i + 1}</td><td>${userLabel}</td><td>${esc(c.date) || '—'}</td><td class="num">${fmt(c.likes)}</td><td class="comment-text">${prefix}${esc(c.text)}</td>`;
+    tr.innerHTML = `<td>${start + i + 1}</td><td>${formatCommentUser(c)}</td><td>${esc(c.date) || '—'}</td><td class="num">${fmt(c.likes)}</td><td class="comment-text">${prefix}${esc(c.text)}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -683,33 +652,48 @@ function renderSingleComments(data) {
 
 $('comments-prev').addEventListener('click', () => {
   if (commentsPage > 1) {
-    commentsPage--;
+    commentsPage -= 1;
     renderCommentsPage();
   }
 });
 
 $('comments-next').addEventListener('click', () => {
-  const totalPages = Math.ceil(singleComments.length / COMMENTS_PER_PAGE);
-  if (commentsPage < totalPages) {
-    commentsPage++;
+  if (commentsPage < Math.ceil(singleComments.length / COMMENTS_PER_PAGE)) {
+    commentsPage += 1;
     renderCommentsPage();
   }
 });
 
+// =============================================================================
+// Form handlers
+// =============================================================================
+
 $('f-single').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = $('go-single'), status = $('status-single'), results = $('results-single');
+  const btn = $('go-single');
+  const status = $('status-single');
+  const results = $('results-single');
   showStatus(status, '', '');
   results.classList.remove('show');
   setBtnLoading(btn, true, 'Fetch metrics', 'Fetching…');
-  const payload = { username: $('username').value.trim(), password: $('password').value, shortcode: $('shortcode').value.trim() };
-  if (!payload.shortcode) { showStatus(status, 'err', 'Please enter a reel or post URL.'); setBtnLoading(btn, false, 'Fetch metrics'); return; }
+
+  const payload = { ...loginPayload(), shortcode: $('shortcode').value.trim() };
+  if (!payload.shortcode) {
+    showStatus(status, 'err', 'Please enter a reel or post URL.');
+    setBtnLoading(btn, false, 'Fetch metrics');
+    return;
+  }
+
   showStatus(status, 'ok', 'Fetching metrics and comments — this may take a moment for popular reels…');
   try {
-    const r = await fetch('/api/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const r = await fetch('/api/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
     const data = await r.json();
     if (!r.ok || !data.ok) {
-      showStatus(status, 'err', 'Error: ' + (data.error || ('HTTP ' + r.status)));
+      showStatus(status, 'err', `Error: ${data.error || `HTTP ${r.status}`}`);
     } else {
       $('m_views').textContent = fmt(data.views);
       $('m_likes').textContent = fmt(data.likes);
@@ -723,39 +707,51 @@ $('f-single').addEventListener('submit', async (e) => {
       $('d_video').textContent = data.is_video ? 'Yes' : 'No';
       $('d_caption').textContent = data.caption || 'No Caption';
       const url = data.url || data.reel_url || getReelUrl(data);
-      const a = $('d_url'); a.href = url; a.textContent = url;
+      const a = $('d_url');
+      a.href = url;
+      a.textContent = url;
       renderSingleComments(data);
       results.classList.add('show');
-      let statusMsg = `Metrics and ${data.comments_fetched ?? 0} comment${(data.comments_fetched ?? 0) === 1 ? '' : 's'} retrieved successfully.`;
+
+      const fetched = data.comments_fetched ?? 0;
+      let statusMsg = `Metrics and ${fetched} comment${fetched === 1 ? '' : 's'} retrieved successfully.`;
       if (data.comments_note === 'partial') statusMsg += ' Some comments may be missing due to an API limit.';
       else if (data.comments_note === 'comments_disabled') statusMsg = 'Metrics retrieved. Comments are disabled on this reel.';
       else if (data.comments_note === 'comments_unavailable') statusMsg = 'Metrics retrieved. Comments could not be loaded.';
       showStatus(status, 'ok', statusMsg);
     }
   } catch (err) {
-    showStatus(status, 'err', 'Network error: ' + err.message);
+    showStatus(status, 'err', `Network error: ${err.message}`);
   } finally {
     setBtnLoading(btn, false, 'Fetch metrics');
   }
 });
 
-$('f-bulk').addEventListener('submit', async (e) => {
+$('f-bulk').addEventListener('submit', (e) => {
   e.preventDefault();
-  await submitBulkCsv();
+  submitBulkCsv();
 });
 
 async function submitBulkCsv() {
-  const btn = $('go-bulk'), status = $('status-bulk');
+  const btn = $('go-bulk');
+  const status = $('status-bulk');
   showStatus(status, '', '');
   $('results-bulk').classList.remove('show');
-  const fileInput = $('csv-file'), file = fileInput.files?.[0];
-  if (!file) { showStatus(status, 'err', 'Please select a CSV file with reel URLs.'); return; }
+
+  const file = $('csv-file').files?.[0];
+  if (!file) {
+    showStatus(status, 'err', 'Please select a CSV file with reel URLs.');
+    return;
+  }
+
   const form = new FormData();
   form.append('username', $('username').value.trim());
   form.append('password', $('password').value);
   form.append('csv', file);
+
   setBtnLoading(btn, true, 'Process CSV', 'Processing…');
   showStatus(status, 'ok', 'Processing URLs — reels appear in the table as they finish. Use Load Comments per row when needed.');
+
   let streamTotal = 0;
   let streamDone = false;
   try {
@@ -763,11 +759,12 @@ async function submitBulkCsv() {
     const ct = r.headers.get('content-type') || '';
     if (!r.ok || !ct.includes('text/event-stream')) {
       const data = await parseJsonResponse(r);
-      showStatus(status, 'err', 'Error: ' + (data.error || ('HTTP ' + r.status)));
+      showStatus(status, 'err', `Error: ${data.error || `HTTP ${r.status}`}`);
       bulkProgressEls.wrap.classList.remove('show');
       return;
     }
-    await consumeBulkStream(r, (event, data) => {
+
+    await consumeEventStream(r, (event, data) => {
       if (event === 'start') {
         streamTotal = data.total || 0;
         initBulkStreamUI(streamTotal);
@@ -803,6 +800,7 @@ async function submitBulkCsv() {
         );
       }
     });
+
     if (!streamDone) {
       showStatus(status, 'err', 'Error: Processing did not complete.');
       bulkProgressEls.wrap.classList.remove('show');
@@ -812,56 +810,138 @@ async function submitBulkCsv() {
       setTimeout(() => bulkProgressEls.wrap.classList.remove('show'), 800);
     }
   } catch (err) {
-    showStatus(status, 'err', 'Network error: ' + err.message);
+    showStatus(status, 'err', `Network error: ${err.message}`);
     bulkProgressEls.wrap.classList.remove('show');
   } finally {
     setBtnLoading(btn, false, 'Process CSV');
-    if (!streamDone) {
-      bulkProgressEls.fill.style.width = '0%';
-      bulkProgressEls.count.textContent = '0 / 0';
-      bulkProgressEls.pct.textContent = '0%';
-    }
+    if (!streamDone) clearStreamProgress(bulkProgressEls);
   }
 }
 
 $('go-debug').addEventListener('click', async () => {
-  const btn = $('go-debug'), box = $('debug-box'), label = btn.querySelector('.btn-label');
-  btn.disabled = true; label.textContent = '…';
-  box.style.display = 'none'; box.textContent = '';
-  const payload = { username: $('username').value.trim(), password: $('password').value, shortcode: $('shortcode').value.trim() };
+  const btn = $('go-debug');
+  const box = $('debug-box');
+  const label = btn.querySelector('.btn-label');
+  btn.disabled = true;
+  label.textContent = '…';
+  box.style.display = 'none';
+  box.textContent = '';
+
   try {
-    const r = await fetch('/api/debug_node', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const r = await fetch('/api/debug_node', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...loginPayload(), shortcode: $('shortcode').value.trim() }),
+    });
     const data = await r.json();
     box.style.display = 'block';
     if (!data.ok) {
-      box.style.color = '#fca5a5'; box.textContent = 'Error: ' + data.error;
+      box.style.color = '#fca5a5';
+      box.textContent = `Error: ${data.error}`;
     } else {
       box.style.color = '';
       const fmtFields = (obj) => Object.entries(obj || {}).map(([k, v]) => `${k.padEnd(50)} = ${JSON.stringify(v)}`).join('\n') || '(none)';
       box.textContent = `Shortcode : ${data.shortcode}\nOwner     : @${data.owner}\niPhone API available : ${data.iphone_available ? 'YES' : 'NO'}\n${data.iphone_error ? `iPhone API error    : ${data.iphone_error}\n` : ''}\nChosen (what the UI will display):\n  likes    = ${data.chosen_likes}\n  comments = ${data.chosen_comments}\n  views    = ${data.chosen_views}\n\n--- GraphQL ("web" API) count fields ---\n${fmtFields(data.graphql_fields)}\n\n--- iPhone / private API count fields ---\n${fmtFields(data.iphone_fields)}`;
     }
   } catch (e) {
-    box.style.display = 'block'; box.style.color = '#fca5a5'; box.textContent = 'Network error: ' + e.message;
+    box.style.display = 'block';
+    box.style.color = '#fca5a5';
+    box.textContent = `Network error: ${e.message}`;
   } finally {
-    btn.disabled = false; label.textContent = 'Debug raw node';
+    btn.disabled = false;
+    label.textContent = 'Debug raw node';
   }
 });
 
 $('f-profile').addEventListener('submit', (e) => {
   e.preventDefault();
-  submitProfileReelsStream('profile');
+  submitProfileReelsStream();
 });
 
 $('f-matrices').addEventListener('submit', (e) => {
   e.preventDefault();
-  submitProfileReelsStream('matrices');
+  submitAccountMatrices();
 });
 
-async function submitProfileReelsStream(tabKey) {
-  const tab = profileStreamTabs[tabKey];
+function yesNo(value) {
+  return value ? 'Yes' : 'No';
+}
+
+function renderAccountMatrices(profile) {
+  const els = accountMatricesEls;
+  els.username.textContent = profile.username ? `@${profile.username}` : '-';
+  els.fullname.textContent = profile.full_name || '-';
+  els.followers.textContent = fmt(profile.followers);
+  els.following.textContent = fmt(profile.following);
+  els.posts.textContent = fmt(profile.posts);
+  els.totalReels.textContent = fmt(profile.total_reels ?? 0);
+  const hasReelDates = profile.oldest_reel_date || profile.newest_reel_date;
+  els.oldestReel.textContent = profile.oldest_reel_date || '—';
+  els.oldestReelFull.textContent = hasReelDates && profile.oldest_reel_display
+    ? `(${profile.oldest_reel_display})`
+    : '';
+  els.latestReel.textContent = profile.newest_reel_date || '—';
+  els.latestReelFull.textContent = hasReelDates && profile.newest_reel_display
+    ? `(${profile.newest_reel_display})`
+    : '';
+  els.verified.textContent = yesNo(profile.is_verified);
+  els.private.textContent = yesNo(profile.is_private);
+  els.business.textContent = yesNo(profile.is_business);
+  els.category.textContent = profile.category || '—';
+  els.biography.textContent = profile.biography || '—';
+  const ext = profile.external_url || '';
+  els.external.innerHTML = ext
+    ? `<a href="${esc(ext)}" target="_blank" rel="noreferrer">${esc(ext)}</a>`
+    : '—';
+  const profileUrl = profile.profile_url || (profile.username ? `https://www.instagram.com/${profile.username}/` : '');
+  els.profileUrl.href = profileUrl || '#';
+  els.profileUrl.textContent = profileUrl || '-';
+}
+
+async function submitAccountMatrices() {
+  const { status, results, btn } = accountMatricesEls;
+  const btnLabel = 'Fetch account matrices';
+  showStatus(status, '', '');
+  results.classList.remove('show');
+  setBtnLoading(btn, true, btnLabel, 'Fetching profile & reels…');
+  showStatus(status, 'ok', 'Loading profile and counting all reels — this may take a moment for large accounts.');
+
+  const target = parseInstagramUsernameOnly($('target-matrices').value.trim());
+  if (!target) {
+    showStatus(status, 'err', 'Please enter a valid Instagram username (e.g. @username). Profile URLs and reel links are not accepted.');
+    setBtnLoading(btn, false, btnLabel);
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/profile_stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...loginPayload(), target }),
+    });
+    const data = await parseJsonResponse(r);
+    if (!r.ok || !data.ok) {
+      showStatus(status, 'err', `Error: ${data.error || `HTTP ${r.status}`}`);
+    } else {
+      renderAccountMatrices(data.profile || {});
+      results.classList.add('show');
+      const resolved = data.resolved_target || data.profile?.username || target;
+      const reels = data.profile?.total_reels ?? 0;
+      showStatus(status, 'ok', `Profile stats loaded for @${resolved} (${fmt(reels)} reel${reels === 1 ? '' : 's'}).`);
+    }
+  } catch (err) {
+    showStatus(status, 'err', `Network error: ${err.message}`);
+  } finally {
+    setBtnLoading(btn, false, btnLabel);
+  }
+}
+
+async function submitProfileReelsStream() {
+  const tab = profileStreamTab;
   const { els, progressEls, btnLabel } = tab;
   const btn = els.btn;
   const status = els.status;
+
   showStatus(status, '', '');
   els.results.classList.remove('show');
   tab.results = [];
@@ -869,8 +949,7 @@ async function submitProfileReelsStream(tabKey) {
   tab.meta = null;
   setBtnLoading(btn, true, btnLabel, 'Fetching…');
 
-  const targetRaw = tab.getTarget();
-  const resolved = tab.resolveTarget(targetRaw);
+  const resolved = tab.resolveTarget(tab.getTarget());
   if (!resolved.ok) {
     showStatus(status, 'err', resolved.msg);
     setBtnLoading(btn, false, btnLabel);
@@ -880,8 +959,7 @@ async function submitProfileReelsStream(tabKey) {
 
   const limitStr = tab.getLimit();
   const payload = {
-    username: $('username').value.trim(),
-    password: $('password').value,
+    ...loginPayload(),
     target: resolved.value,
     limit: limitStr === '' ? 20 : parseInt(limitStr, 10) || 0,
   };
@@ -889,30 +967,30 @@ async function submitProfileReelsStream(tabKey) {
   progressEls.wrap.classList.add('show');
   setStreamProgress(progressEls, 0, 0, 0, 'Connecting…');
   showStatus(status, 'ok', 'Loading reels — each row appears as soon as it is fetched. Click Load Comments when you need comment text.');
+
   let streamDone = false;
   let resolvedTarget = '';
   try {
-    const r = await fetch('/api/profile_reels_stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const r = await fetch('/api/profile_reels_stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
     const ct = r.headers.get('content-type') || '';
     if (!r.ok || !ct.includes('text/event-stream')) {
       const data = await parseJsonResponse(r);
-      showStatus(status, 'err', 'Error: ' + (data.error || ('HTTP ' + r.status)));
+      showStatus(status, 'err', `Error: ${data.error || `HTTP ${r.status}`}`);
       progressEls.wrap.classList.remove('show');
       return;
     }
-    await consumeBulkStream(r, (event, data) => {
+
+    await consumeEventStream(r, (event, data) => {
       if (event === 'start') {
         resolvedTarget = data.resolved_target || '';
         const expected = data.expected || data.total || 0;
         initProfileStreamUI(tab, expected);
-        setProfileStreamHeader(tab, data.profile, null);
-        setStreamProgress(
-          progressEls,
-          0,
-          expected,
-          0,
-          `Loading reels for @${data.profile?.username || resolvedTarget}…`,
-        );
+        setProfileStreamMeta(tab, data.profile);
+        setStreamProgress(progressEls, 0, expected, 0, `Loading reels for @${data.profile?.username || resolvedTarget}…`);
       } else if (event === 'reel') {
         const reel = data.reel || {};
         const total = data.total || data.expected || data.current || tab.results.length + tab.errors.length + 1;
@@ -928,16 +1006,9 @@ async function submitProfileReelsStream(tabKey) {
         }
         updateProfileStreamSummary(tab);
         const pct = total ? Math.round((data.current / total) * 100) : 0;
-        setStreamProgress(
-          progressEls,
-          data.current,
-          total,
-          pct,
-          `Loaded reel ${data.current}: ${reel.shortcode || '—'}`,
-        );
+        setStreamProgress(progressEls, data.current, total, pct, `Loaded reel ${data.current}: ${reel.shortcode || '—'}`);
       } else if (event === 'complete') {
         streamDone = true;
-        setProfileStreamDateRange(tab, data.date_range);
         const total = data.total || tab.results.length + tab.errors.length;
         setStreamProgress(progressEls, total, total, 100, 'All reels loaded');
         if (!tab.results.length && !tab.errors.length) {
@@ -950,28 +1021,21 @@ async function submitProfileReelsStream(tabKey) {
         throw new Error(data.error || 'Profile fetch failed.');
       }
     });
+
     if (!streamDone) {
       showStatus(status, 'err', 'Error: Profile fetch did not complete.');
       progressEls.wrap.classList.remove('show');
     } else {
       const note = resolvedTarget ? ` (resolved target: @${resolvedTarget})` : '';
       const failNote = tab.errors.length ? `, ${tab.errors.length} failed` : '';
-      showStatus(
-        status,
-        'ok',
-        `Loaded ${tab.results.length} reel${tab.results.length === 1 ? '' : 's'}${failNote}${note}. Use Load Comments per row for comment text.`,
-      );
+      showStatus(status, 'ok', `Loaded ${tab.results.length} reel${tab.results.length === 1 ? '' : 's'}${failNote}${note}. Use Load Comments per row for comment text.`);
       setTimeout(() => progressEls.wrap.classList.remove('show'), 800);
     }
   } catch (err) {
-    showStatus(status, 'err', 'Network error: ' + err.message);
+    showStatus(status, 'err', `Network error: ${err.message}`);
     progressEls.wrap.classList.remove('show');
   } finally {
     setBtnLoading(btn, false, btnLabel);
-    if (!streamDone) {
-      progressEls.fill.style.width = '0%';
-      progressEls.count.textContent = '0 / 0';
-      progressEls.pct.textContent = '0%';
-    }
+    if (!streamDone) clearStreamProgress(progressEls);
   }
 }

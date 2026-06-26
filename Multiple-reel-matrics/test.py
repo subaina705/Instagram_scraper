@@ -35,7 +35,7 @@ Table of contents (sections below)
     3. URL / shortcode / username parsers
     4. Scraping primitives (single reel, profile, date range)
     5. Error mapping (instagrapi exceptions -> JSON)
-    6. HTTP routes  (/ , /api/fetch , /api/reel_comments , /api/bulk_fetch , /api/bulk_fetch_stream , /api/profile_reels , /api/profile_reels_stream , /api/debug_node)
+    6. HTTP routes  (/ , /api/fetch , /api/reel_comments , /api/bulk_fetch , /api/bulk_fetch_stream , /api/profile_reels , /api/profile_reels_stream , /api/profile_stats , /api/debug_node)
     7. Entry point
 """
 
@@ -267,6 +267,63 @@ def extract_username(value: str) -> Optional[str]:
 
     # Plain username (maybe with a trailing slash)
     return value.rstrip("/")
+
+
+def parse_plain_username(value: str) -> Optional[str]:
+    """
+    Accept only a bare @username (Account Matrices tab).
+    Rejects profile URLs, reel links, and other non-username input.
+    """
+    value = (value or "").strip()
+    if not value or re.search(r"instagram\.com", value, re.I) or value.startswith("http"):
+        return None
+    username = value.lstrip("@").rstrip("/")
+    if not username or not re.fullmatch(r"[A-Za-z0-9._]+", username):
+        return None
+    return username
+
+
+def user_to_profile_stats(user, *, reel_summary: Optional[dict] = None) -> dict:
+    """Serialize instagrapi User fields for the Account Matrices tab."""
+    category = user.category_name or user.category or user.business_category_name or ""
+    stats = {
+        "username": user.username,
+        "full_name": user.full_name or "",
+        "followers": user.follower_count,
+        "following": user.following_count,
+        "posts": user.media_count,
+        "is_private": user.is_private,
+        "is_verified": user.is_verified,
+        "is_business": user.is_business,
+        "biography": user.biography or "",
+        "external_url": user.external_url or "",
+        "category": category,
+        "profile_url": f"https://www.instagram.com/{user.username}/",
+        "total_reels": 0,
+        "oldest_reel_date": None,
+        "oldest_reel_display": None,
+        "newest_reel_date": None,
+        "newest_reel_display": None,
+    }
+    if reel_summary:
+        stats.update(reel_summary)
+    return stats
+
+
+def fetch_profile_reel_summary(cl: Client, user_pk) -> dict:
+    """
+    Paginate through every clip on a profile (limit=0 = all) and return
+    accurate reel count plus oldest / newest upload dates.
+    """
+    reels_raw = list(iter_user_clips_v1(cl, user_pk, limit=0))
+    date_range = compute_reel_date_range(reels_raw)
+    return {
+        "total_reels": len(reels_raw),
+        "oldest_reel_date": date_range["oldest_date"],
+        "oldest_reel_display": date_range["oldest_display"],
+        "newest_reel_date": date_range["newest_date"],
+        "newest_reel_display": date_range["newest_display"],
+    }
 
 
 def resolve_target_username(cl: Client, value: str) -> str:
@@ -706,24 +763,52 @@ def compute_reel_date_range(reels_raw) -> dict:
 # exceptions to human-readable messages and meaningful HTTP status codes.
 
 
+def _ig_error_details(
+    e: Exception, what: str = "Resource", *, ui: bool = False
+) -> Optional[tuple[str, int]]:
+    """
+    Map instagrapi exceptions to (message, http_status).
+    ``ui=True`` uses longer copy for login flows shown in the browser.
+    """
+    if isinstance(e, UserNotFound):
+        return f"{what} not found.", 404
+    if isinstance(e, PrivateAccount):
+        return (
+            f"{what} is private and the logged-in account does not follow it.",
+            403,
+        )
+    if isinstance(e, BadPassword):
+        return "Bad password.", 401
+    if isinstance(e, TwoFactorRequired):
+        msg = (
+            "Two-factor authentication required. 2FA isn't wired into this UI yet; "
+            "log in once on the official Instagram app, then retry."
+            if ui
+            else "Two-factor authentication required."
+        )
+        return msg, 401
+    if isinstance(e, ChallengeRequired):
+        msg = (
+            "Instagram is asking for a security challenge (verification email/SMS). "
+            "Open instagram.com or the app, confirm it's really you, then retry here."
+            if ui
+            else "Instagram security challenge required — confirm in the app, then retry."
+        )
+        return msg, 401
+    if isinstance(e, LoginRequired):
+        return "Login required (session expired). Provide your password.", 401
+    if isinstance(e, PleaseWaitFewMinutes):
+        return "Instagram rate-limited this account. Wait a few minutes.", 429
+    if isinstance(e, ClientError):
+        return f"Instagram refused the request: {e}", 502
+    return None
+
+
 def error_message_from_exception(e: Exception, what: str = "Reel") -> str:
     """Human-readable error string for per-URL bulk failures (no HTTP response)."""
-    if isinstance(e, UserNotFound):
-        return f"{what} not found."
-    if isinstance(e, PrivateAccount):
-        return f"{what} is private and the logged-in account does not follow it."
-    if isinstance(e, BadPassword):
-        return "Bad password."
-    if isinstance(e, TwoFactorRequired):
-        return "Two-factor authentication required."
-    if isinstance(e, ChallengeRequired):
-        return "Instagram security challenge required — confirm in the app, then retry."
-    if isinstance(e, LoginRequired):
-        return "Login required (session expired). Provide your password."
-    if isinstance(e, PleaseWaitFewMinutes):
-        return "Instagram rate-limited this account. Wait a few minutes."
-    if isinstance(e, ClientError):
-        return f"Instagram refused the request: {e}"
+    details = _ig_error_details(e, what, ui=False)
+    if details:
+        return details[0]
     return f"{type(e).__name__}: {e}"
 
 
@@ -880,6 +965,49 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
+# Shared headers for all streaming endpoints (disable proxy buffering).
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "Connection": "keep-alive",
+}
+
+
+def _sse_response(generator):
+    """Wrap a generator in a Flask SSE Response."""
+    return Response(
+        generator(),
+        mimetype="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+def _process_bulk_urls(
+    cl: Client, urls: list[str], reel_cache: Optional[dict[str, dict]] = None
+) -> tuple[list[dict], int, int]:
+    """Fetch metrics for every URL in a bulk CSV; returns (rows, ok_count, fail_count)."""
+    cache = reel_cache if reel_cache is not None else {}
+    results: list[dict] = []
+    successful = 0
+    failed = 0
+    for raw_url in urls:
+        row = process_reel_url(cl, raw_url, fetch_comments=False, reel_cache=cache)
+        results.append(row)
+        if row["status"] == "Success":
+            successful += 1
+        else:
+            failed += 1
+    return results, successful, failed
+
+
+def _parse_reel_limit(raw, default: int = 20) -> int:
+    """Parse ``limit`` from JSON body; 0 means fetch all reels."""
+    try:
+        return max(0, int(raw if raw is not None else default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _parse_bulk_upload():
     """
     Validate a bulk CSV upload request.
@@ -919,42 +1047,10 @@ def handle_ig_error(e: Exception, what: str = "Resource"):
     response tuple. `what` is the noun for "not found" / "private" messages
     (e.g. "Reel", "Profile").
     """
-    if isinstance(e, UserNotFound):
-        return jsonify(ok=False, error=f"{what} not found."), 404
-
-    if isinstance(e, PrivateAccount):
-        return jsonify(
-            ok=False,
-            error=f"{what} is private and the logged-in account does not follow it.",
-        ), 403
-
-    if isinstance(e, BadPassword):
-        return jsonify(ok=False, error="Bad password."), 401
-
-    if isinstance(e, TwoFactorRequired):
-        return jsonify(
-            ok=False,
-            error="Two-factor authentication required. 2FA isn't wired into this UI yet; "
-                  "log in once on the official Instagram app, then retry.",
-        ), 401
-
-    if isinstance(e, ChallengeRequired):
-        return jsonify(
-            ok=False,
-            error="Instagram is asking for a security challenge (verification email/SMS). "
-                  "Open instagram.com or the app, confirm it's really you, then retry here.",
-        ), 401
-
-    if isinstance(e, LoginRequired):
-        return jsonify(ok=False, error="Login required (session expired). Provide your password."), 401
-
-    if isinstance(e, PleaseWaitFewMinutes):
-        return jsonify(ok=False, error="Instagram rate-limited this account. Wait a few minutes."), 429
-
-    if isinstance(e, ClientError):
-        return jsonify(ok=False, error=f"Instagram refused the request: {e}"), 502
-
-    # Catch-all
+    details = _ig_error_details(e, what, ui=True)
+    if details:
+        msg, status = details
+        return jsonify(ok=False, error=msg), status
     return jsonify(ok=False, error=f"{type(e).__name__}: {e}"), 500
 
 
@@ -1057,26 +1153,13 @@ def api_bulk_fetch():
     except Exception as e:
         return handle_ig_error(e, what="Login")
 
-    results = []
-    successful = 0
-    failed = 0
     reel_cache: dict[str, dict] = {}
-    for raw_url in urls:
-        row = process_reel_url(cl, raw_url, fetch_comments=False, reel_cache=reel_cache)
-        results.append(row)
-        if row["status"] == "Success":
-            successful += 1
-        else:
-            failed += 1
+    results, successful, failed = _process_bulk_urls(cl, urls, reel_cache)
 
     return jsonify(
         ok=True,
         results=results,
-        summary={
-            "total": len(results),
-            "successful": successful,
-            "failed": failed,
-        },
+        summary={"total": len(results), "successful": successful, "failed": failed},
     )
 
 
@@ -1099,10 +1182,8 @@ def api_bulk_fetch_stream():
             yield _sse("error", {"error": error_message_from_exception(e, what="Login")})
             return
 
-        results = []
-        successful = 0
-        failed = 0
         reel_cache: dict[str, dict] = {}
+        results, successful, failed = [], 0, 0
         for i, raw_url in enumerate(urls, start=1):
             row = process_reel_url(cl, raw_url, fetch_comments=False, reel_cache=reel_cache)
             results.append(row)
@@ -1127,23 +1208,11 @@ def api_bulk_fetch_stream():
             {
                 "ok": True,
                 "results": results,
-                "summary": {
-                    "total": total,
-                    "successful": successful,
-                    "failed": failed,
-                },
+                "summary": {"total": total, "successful": successful, "failed": failed},
             },
         )
 
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )
+    return _sse_response(generate)
 
 
 @app.route("/api/profile_reels", methods=["POST"])
@@ -1160,10 +1229,7 @@ def api_profile_reels():
         return jsonify(ok=False, error="Target username is required."), 400
 
     # `limit` controls how many reels to fetch. 0 = all.
-    try:
-        limit = max(0, int(body.get("limit", 20)))
-    except (TypeError, ValueError):
-        limit = 20
+    limit = _parse_reel_limit(body.get("limit", 20))
 
     target: Optional[str] = None
     try:
@@ -1220,6 +1286,41 @@ def api_profile_reels():
         return handle_ig_error(e, what=f"Profile '{target or target_raw}'")
 
 
+@app.route("/api/profile_stats", methods=["POST"])
+def api_profile_stats():
+    """Fetch profile stats + accurate reel summary for the Account Matrices tab."""
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = (body.get("password") or "")
+    target_raw = (body.get("target") or "").strip()
+
+    if not username:
+        return jsonify(ok=False, error="Login username is required."), 400
+    if not target_raw:
+        return jsonify(ok=False, error="Target username is required."), 400
+
+    target = parse_plain_username(target_raw)
+    if not target:
+        return jsonify(
+            ok=False,
+            error="Please enter a valid Instagram username (e.g. @username). "
+                  "Profile URLs and reel links are not accepted.",
+        ), 400
+
+    try:
+        cl = get_client(username, password or None)
+        with _scrape_delay(cl, fast=True):
+            user = cl.user_info_by_username_v1(target)
+            reel_summary = fetch_profile_reel_summary(cl, user.pk)
+        return jsonify(
+            ok=True,
+            resolved_target=user.username,
+            profile=user_to_profile_stats(user, reel_summary=reel_summary),
+        )
+    except Exception as e:
+        return handle_ig_error(e, what=f"Profile '{target}'")
+
+
 @app.route("/api/profile_reels_stream", methods=["POST"])
 def api_profile_reels_stream():
     """Stream profile reels incrementally (metrics only; comments on demand)."""
@@ -1233,10 +1334,7 @@ def api_profile_reels_stream():
     if not target_raw:
         return jsonify(ok=False, error="Target username is required."), 400
 
-    try:
-        limit = max(0, int(body.get("limit", 20)))
-    except (TypeError, ValueError):
-        limit = 20
+    limit = _parse_reel_limit(body.get("limit", 20))
 
     @stream_with_context
     def generate():
@@ -1302,15 +1400,7 @@ def api_profile_reels_stream():
         except Exception as e:
             yield _sse("error", {"error": error_message_from_exception(e, what="Profile")})
 
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )
+    return _sse_response(generate)
 
 
 @app.route("/api/debug_node", methods=["POST"])

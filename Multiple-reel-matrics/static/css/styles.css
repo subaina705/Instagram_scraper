@@ -1,3 +1,10 @@
+/* =============================================================================
+   Reel Metrics — styles for index.html (served by test.py).
+
+   Sections: theme tokens → layout → auth → workspace/tabs → forms/buttons
+             → results/tables → comments → progress/errors → utilities
+   ============================================================================= */
+
 :root[data-theme="dark"] {
   --bg: #0a0c10;
   --card: #12151c;
@@ -1072,20 +1079,16 @@ td.url-cell {
   font-size: 11px;
 }
 
-.matrices-table th,
-.matrices-table td,
 .bulk-table th,
 .bulk-table td {
   text-align: center;
   vertical-align: middle;
 }
 
-.matrices-table td.num,
 .bulk-table td.num {
   text-align: center;
 }
 
-.matrices-table td.url-cell a,
 .bulk-table td.url-cell a {
   display: inline-block;
   text-align: center;

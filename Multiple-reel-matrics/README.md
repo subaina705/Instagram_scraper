@@ -1,466 +1,339 @@
-# Instagram Reel Metrics — Beginner-Friendly Guide
+# Instagram Reel Metrics — Simple Guide
 
-A small local web app that fetches **real Instagram Reel statistics** — likes, comments, views, shares, saves, reposts — and can list every reel of any public account.
+A **local web app** that runs on your computer. It logs into Instagram (like the mobile app) and fetches **reel numbers** — views, likes, comments, shares, saves, and more.
 
-This README is written for students. No prior knowledge of Instagram's APIs is assumed.
+Everything stays on your machine. Nothing is sent to a cloud server.
 
----
-
-## Table of Contents
-
-1. [What is this project?](#1-what-is-this-project)
-2. [The big idea: Instagram has TWO doors](#2-the-big-idea-instagram-has-two-doors)
-3. [What is `instagrapi`?](#3-what-is-instagrapi)
-4. [How the whole thing fits together](#4-how-the-whole-thing-fits-together)
-5. [The two files in this project](#5-the-two-files-in-this-project)
-6. [The request lifecycle (step by step)](#6-the-request-lifecycle-step-by-step)
-7. [Logging in and sessions](#7-logging-in-and-sessions)
-8. [Single Reel mode vs Profile Reels mode](#8-single-reel-mode-vs-profile-reels-mode)
-9. [Running it on your machine](#9-running-it-on-your-machine)
-10. [Common errors and what they mean](#10-common-errors-and-what-they-mean)
-11. [Glossary](#11-glossary)
+> **Windows users:** See [SETUP.md](SETUP.md) for a full step-by-step install guide.
 
 ---
 
-## 1. What is this project?
+## Quick start (3 steps)
 
-Imagine you're a social-media analyst, and your boss asks:
+1. **Install** (one time):
+   ```bash
+   cd Multiple-reel-matrics
+   python -m venv .venv
+   source .venv/bin/activate   # Windows: .venv\Scripts\activate
+   pip install flask instagrapi
+   ```
 
-> "Tell me how many likes, comments, and views this Instagram reel got — and oh, also pull the same info for every reel of `@atiazuhair`."
+2. **Run the server**:
+   ```bash
+   python test.py
+   ```
 
-You could open each reel and read the numbers by hand. **Slow.** You could ask Instagram nicely. **They won't answer.** So instead, we built a tiny tool that:
+3. **Open in browser**: [http://127.0.0.1:5000](http://127.0.0.1:5000)
 
-- Pretends to be the Instagram mobile app.
-- Logs in once with your username and password.
-- Pulls the numbers automatically.
-- Shows them in a nice browser interface.
-
-That tool is this project. It runs **locally on your computer** — nothing is uploaded to a server somewhere.
-
-### The big-picture analogy
-
-Think of the project like a **vending machine for Instagram numbers**:
-
-```
-   You (in browser)              Our code (the machine)           Instagram
-   ┌─────────────────┐           ┌────────────────────┐           ┌───────────┐
-   │ "Give me stats  │  ──HTTP─▶ │  Flask app +       │  ──API──▶ │           │
-   │  for reel XYZ"  │           │  instagrapi        │           │  Servers  │
-   │                 │ ◀──JSON── │  (the brains)      │ ◀──JSON── │           │
-   └─────────────────┘           └────────────────────┘           └───────────┘
-```
-
-You drop a request in the slot, the machine fetches and decodes the answer, you get a nice display.
+   - Enter your **Instagram username**
+   - Enter your **password** (only needed the first time)
+   - Pick a tab and fetch data
 
 ---
 
-## 2. The big idea: Instagram has TWO doors
-
-This is the most important concept in the whole project. Pay attention.
-
-Instagram does NOT have one single way to ask for data. It has **two completely separate APIs**, like two doors to the same building:
+## Folder structure (what each file does)
 
 ```
-                    ┌───────────────────────────────┐
-                    │       INSTAGRAM SERVERS       │
-                    │                               │
-                    │   (same data lives here)      │
-                    │                               │
-                    └──────────┬─────────┬──────────┘
-                               │         │
-                  ┌────────────┘         └────────────┐
-                  │                                   │
-        ╔═════════▼══════════╗             ╔══════════▼══════════╗
-        ║  FRONT DOOR        ║             ║  BACK DOOR          ║
-        ║  "Web / GraphQL"   ║             ║  "Mobile / Private" ║
-        ║                    ║             ║                     ║
-        ║  www.instagram.com ║             ║  i.instagram.com    ║
-        ║                    ║             ║                     ║
-        ║  Used by browsers  ║             ║  Used by the IG app ║
-        ╚═════════╤══════════╝             ╚══════════╤══════════╝
-                  │                                   │
-                  │                                   │
-        Gives FILTERED counts                 Gives REAL counts
-        (often much smaller                   (matches what users
-         than what the UI shows)               actually see in the app)
-```
-
-### Cashier analogy
-
-Imagine two cashiers in the same supermarket counting how many customers visited today:
-
-- **Front-door cashier (Web API):** "I can only count customers I personally saw walk in. So my count is 1,367."
-- **Back-door cashier (Mobile API):** "I have access to the security camera footage of every entrance. The real number is 5,115."
-
-Both cashiers work for the same supermarket. They just have different views of the same building. When we want the *real* number, we have to ask the back-door cashier.
-
-> **Key insight:** Older libraries like `instaloader` only know the front door. They return 1,367 likes when the real number is 5,115. That's why our app started giving wrong numbers — until we switched to the back-door approach.
-
----
-
-## 3. What is `instagrapi`?
-
-`instagrapi` is a **Python library** (a collection of pre-written code) that knows how to talk to Instagram's back door.
-
-### How to explain it to a 10-year-old
-
-> Instagram's back door (the "mobile API") has a secret knock. If you knock the right rhythm, the door opens and you get the real numbers. If you knock wrong, the door stays shut and they tell you "go away".
->
-> `instagrapi` is the **rhythm book**. It memorises the right knock — every header, every random ID, every cookie — and replays it so Instagram thinks we're a real iPhone running the Instagram app.
-
-### What `instagrapi` actually does for us
-
-| What you write | What `instagrapi` does behind the scenes |
-|---|---|
-| `cl.login("user", "pass")` | Sends ~10 mobile-style HTTP requests with the correct device IDs, randomised UUIDs, encrypted password, etc. Stores cookies. |
-| `cl.media_pk_from_code("DXXIFFy...")` | Turns the short URL slug into Instagram's internal number ID for that post. |
-| `cl.user_clips_v1(user_id, amount=20)` | Pages through Instagram's "give me this user's reels" endpoint and returns 20 reels worth of data. |
-| `cl.private_request("media/<pk>/info/")` | Makes a raw mobile-API call to a custom endpoint. We use this to get the FULL set of metrics (likes, comments, plays, shares, saves, reposts). |
-
-### Why we don't write all that ourselves
-
-If we tried to talk to `i.instagram.com` from scratch, we'd need to handle:
-
-- Generating a random Android/iPhone device fingerprint that Instagram accepts.
-- Encrypting the password with a public key Instagram rotates.
-- Adding ~20 special headers (`X-IG-App-ID`, `X-IG-Capabilities`, ...).
-- Handling cookies, login challenges, rate-limit retries.
-
-That's months of work. `instagrapi` does it all for us in two lines:
-
-```python
-cl = Client()
-cl.login("username", "password")
-```
-
----
-
-## 4. How the whole thing fits together
-
-Here is the project at a glance:
-
-```
-                    YOUR WEB BROWSER
-                          │
-                          │ (1) You type a reel URL & click Fetch
-                          ▼
-            ┌─────────────────────────────────┐
-            │            index.html           │   ← all UI lives here
-            │  HTML + CSS + JavaScript        │     (front end)
-            └────────────────┬────────────────┘
-                             │ (2) JavaScript sends a JSON request
-                             │     POST /api/fetch
-                             ▼
-            ┌─────────────────────────────────┐
-            │              test.py            │   ← Flask app
-            │   ┌─────────────────────────┐   │     (back end)
-            │   │  HTTP routes            │   │
-            │   └───────────┬─────────────┘   │
-            │               │ (3)             │
-            │   ┌───────────▼─────────────┐   │
-            │   │  Login / session cache  │   │
-            │   └───────────┬─────────────┘   │
-            │               │ (4)             │
-            │   ┌───────────▼─────────────┐   │
-            │   │       instagrapi        │   │
-            │   └───────────┬─────────────┘   │
-            └───────────────┬─────────────────┘
-                            │ (5) HTTPS call to mobile API
-                            ▼
-                  ╔═════════════════════╗
-                  ║  i.instagram.com    ║  ← the mobile (back-door) API
-                  ║   /api/v1/...       ║
-                  ╚═════════════════════╝
-                            │ (6) JSON with real numbers
-                            │
-                  Numbers flow back up: Instagram → instagrapi → Flask → JS → screen.
-```
-
-So whenever you click a button in the browser, it really just bounces a JSON message down this stack and a JSON answer back up.
-
----
-
-## 5. The two files in this project
-
-That's it. Just two files.
-
-```
-Practive Frontend/
+Multiple-reel-matrics/
 │
-├── test.py          (the "brain" – Python / Flask backend)
+├── test.py                 ← Backend (brain). Python + Flask + instagrapi
+├── index.html              ← Frontend layout (tabs, forms, tables)
 │
-└── index.html       (the "face" – HTML + CSS + JavaScript front end)
+├── static/
+│   ├── css/styles.css      ← Colors, layout, dark/light theme
+│   └── js/app.js           ← Buttons, API calls, live progress bars
+│
+└── .ig_sessions/           ← Created automatically. Saves login so you
+                              don't re-type your password every time
 ```
 
-### Why split them?
-
-| File | Job | Analogy |
-|---|---|---|
-| `index.html` | Show buttons, take input, draw results. | The **steering wheel and dashboard** of a car. |
-| `test.py` | Talk to Instagram, do all the heavy lifting. | The **engine** of the car. |
-
-You can change the dashboard (colors, layout, text) without touching the engine — and vice versa. That's good software design.
-
-### Inside `test.py` (the brain)
-
-`test.py` is divided into **7 sections** clearly marked with banner comments:
-
-```
-1. Imports & module setup        ── grab the tools we need
-2. Session management            ── log in once, remember it
-3. URL / shortcode parsers       ── accept any input format
-4. Scraping primitives           ── ask Instagram for data
-5. Error mapping                 ── turn errors into friendly messages
-6. HTTP routes                   ── what the browser calls
-7. Entry point                   ── start the server
-```
-
-Each section is a chapter. You can jump to chapter 6, for example, and understand what the API endpoints do without reading the rest first.
+| File | Role in one sentence |
+|------|----------------------|
+| `test.py` | Talks to Instagram and returns JSON data to the browser |
+| `index.html` | Shows the 4 tabs and all input fields / result tables |
+| `app.js` | When you click a button, it calls the right API and updates the page |
+| `styles.css` | Makes the app look clean (dark mode, tables, progress bars) |
 
 ---
 
-## 6. The request lifecycle (step by step)
+## Big picture — how it works
 
-Let's trace what happens when you click **"Fetch Metrics"** on a single reel.
+```mermaid
+flowchart LR
+    subgraph Your Computer
+        Browser["Browser\n(index.html + app.js)"]
+        Flask["Flask server\n(test.py)"]
+        Session[".ig_sessions/\n(saved login)"]
+    end
 
-```
- ┌────────────────────────────────────────────────────────────────────────┐
- │  STEP 1 — Browser sends JSON                                            │
- │                                                                         │
- │     POST /api/fetch                                                     │
- │     { "username": "you", "password": "...", "shortcode": "DWap..." }    │
- └─────────────────────────────────┬───────────────────────────────────────┘
-                                   │
-                                   ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │  STEP 2 — Flask receives + validates                                   │
- │     • Body has all required fields? ✓                                  │
- │     • If not → return 400 Bad Request                                  │
- └─────────────────────────────────┬───────────────────────────────────────┘
-                                   │
-                                   ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │  STEP 3 — get_client()                                                 │
- │                                                                         │
- │   ┌─ Already logged in this run?          ──── yes ──▶  reuse client   │
- │   │                                                                     │
- │   ├─ Have a saved session on disk?        ──── yes ──▶  load + verify  │
- │   │                                                                     │
- │   └─ Otherwise                            ──── yes ──▶  password login │
- └─────────────────────────────────┬───────────────────────────────────────┘
-                                   │
-                                   ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │  STEP 4 — Parse the input                                              │
- │                                                                         │
- │   extract_shortcode("https://.../reel/DWap.../?igsh=...")               │
- │       → "DWap..."                                                       │
- │                                                                         │
- │   cl.media_pk_from_code("DWap...")                                      │
- │       → 3862581467293681892   (internal numeric ID)                     │
- └─────────────────────────────────┬───────────────────────────────────────┘
-                                   │
-                                   ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │  STEP 5 — fetch_single_media()                                         │
- │                                                                         │
- │   cl.private_request("media/3862.../info/")                             │
- │       → talks to i.instagram.com                                        │
- │       → returns a giant JSON object with ALL stats                      │
- │                                                                         │
- │   We pick the fields we want:                                           │
- │       like_count, comment_count, play_count,                            │
- │       reshare_count, save_count, media_repost_count                     │
- └─────────────────────────────────┬───────────────────────────────────────┘
-                                   │
-                                   ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │  STEP 6 — Send JSON back to the browser                                │
- │                                                                         │
- │   { "ok": true,                                                         │
- │     "likes": 5115, "comments": 122, "views": 303585,                    │
- │     "shares": 573, "saves": 511, "reposts": 34, ... }                   │
- └─────────────────────────────────┬───────────────────────────────────────┘
-                                   │
-                                   ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │  STEP 7 — Browser draws the numbers                                    │
- │                                                                         │
- │   JavaScript fills each metric card on the page.                        │
- │   You see the answer.                                                   │
- └────────────────────────────────────────────────────────────────────────┘
+    Instagram["Instagram\n(mobile API)"]
+
+    Browser -->|"HTTP requests\n(JSON or CSV)"| Flask
+    Flask <-->|"read/write login"| Session
+    Flask -->|"instagrapi\n(private API)"| Instagram
+    Instagram -->|"views, likes,\ncomments, reels"| Flask
+    Flask -->|"JSON or live stream"| Browser
 ```
 
-That's the full journey — about 1–2 seconds from click to display.
+**In plain English:**
+
+1. You use the **website** in your browser.
+2. The website asks the **Python server** (`test.py`) for data.
+3. The server uses **instagrapi** to talk to Instagram (same API the phone app uses).
+4. Results come back and show in tables on your screen.
 
 ---
 
-## 7. Logging in and sessions
+## The 4 tabs (what each one is for)
 
-Every time you ask Instagram for something, you need to prove who you are. That's annoying if you have to type your password every request, so we use **sessions**.
+```mermaid
+flowchart TB
+    App["Instagram Scraper App"]
+    App --> T1["Single reel"]
+    App --> T2["Multiple reels"]
+    App --> T3["Profile reels"]
+    App --> T4["Account Matrices"]
 
-### What's a session?
-
-A session is like a **stamp on your wrist at a theme park**:
-
-- You pay once at the entrance and get the stamp.
-- For the rest of the day, you can leave and come back without paying again.
-- At the end of the day, the stamp wears off and you'd have to pay again next time.
-
-When `instagrapi` logs in successfully, Instagram gives our client a "stamp" (a bunch of cookies + device IDs). We save those to a file:
-
-```
-.ig_sessions/instagrapi-<your_username>.json
+    T1 --> A1["One URL → full metrics + comments"]
+    T2 --> A2["CSV of URLs → table of all reels"]
+    T3 --> A3["Profile → list of reels with stats"]
+    T4 --> A4["Username → profile stats only\n(no reel table)"]
 ```
 
-Next time you open the app:
+### 1. Single reel
 
-1. We load that file.
-2. We make one cheap test call (`get_timeline_feed`) to see if the stamp is still valid.
-3. If yes → no password needed.
-4. If no (expired/revoked) → you have to type your password again.
+**Use when:** You have **one** reel or post link.
 
-### Session lifecycle diagram
+**Steps:**
+1. Paste reel URL (or shortcode)
+2. Click **Fetch metrics**
+3. See views, likes, comments, shares, saves, reposts
+4. Comments appear below (paginated)
 
+**API used:** `POST /api/fetch`
+
+---
+
+### 2. Multiple reels (bulk CSV)
+
+**Use when:** You have **many** reel URLs in a spreadsheet.
+
+**Steps:**
+1. Prepare a CSV with one URL per row (or a column named `url`)
+2. Upload the file
+3. Click **Process CSV**
+4. Rows appear **one by one** as each reel finishes (progress bar)
+5. Click **Load Comments** on any row if you need comment text
+6. **Download CSV** when done
+
+**API used:** `POST /api/bulk_fetch_stream` (live progress via Server-Sent Events)
+
+---
+
+### 3. Profile reels
+
+**Use when:** You want **all reels from a profile** (with a limit).
+
+**Steps:**
+1. Enter `@username`, profile URL, or even a reel URL (owner is detected)
+2. Set **Reels to fetch** (e.g. `20`, or `0` for all)
+3. Click **Fetch profile reels**
+4. Reels stream into the table as they load
+5. Summary shows total views, likes, comments across loaded reels
+
+**API used:** `POST /api/profile_reels_stream`
+
+> Profile info (followers, bio, etc.) is **not** shown here — use **Account Matrices** for that.
+
+---
+
+### 4. Account Matrices
+
+**Use when:** You only want **account-level stats**, not a reel list.
+
+**Steps:**
+1. Enter **username only** (e.g. `@username` — no profile URLs)
+2. Click **Fetch account matrices**
+3. See followers, posts, bio, verified status, **total reels**, oldest/latest reel dates, etc.
+
+**API used:** `POST /api/profile_stats`
+
+The server loads profile info, then **counts every reel** on the account to get accurate totals and dates. Large accounts may take longer.
+
+---
+
+## Login flow (first time vs later)
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant Browser
+    participant test.py
+    participant Disk as .ig_sessions/
+    participant IG as Instagram
+
+    You->>Browser: Enter username + password
+    Browser->>test.py: API request with credentials
+    test.py->>Disk: Any saved session for this user?
+    alt Session exists and still valid
+        Disk-->>test.py: Load cookies
+        test.py->>IG: Quick check (timeline)
+        IG-->>test.py: OK
+    else No session or expired
+        test.py->>IG: Login with password
+        IG-->>test.py: Session cookies
+        test.py->>Disk: Save session file
+    end
+    test.py-->>Browser: Start fetching data
 ```
-   First run                              Later runs
-   ─────────                              ──────────
 
-   ┌──────────────┐                       ┌──────────────┐
-   │ user types   │                       │ user opens   │
-   │ password     │                       │ the app      │
-   └──────┬───────┘                       └──────┬───────┘
-          │                                      │
-          ▼                                      ▼
-   ┌──────────────┐                       ┌──────────────┐
-   │ instagrapi   │                       │ load session │
-   │   login      │                       │  from disk   │
-   └──────┬───────┘                       └──────┬───────┘
-          │                                      │
-          ▼                                      ▼
-   ┌──────────────┐                       ┌──────────────┐
-   │ save session │                       │ verify with  │
-   │   to disk    │                       │  test call   │
-   └──────┬───────┘                       └──────┬───────┘
-          │                                      │
-          ▼                                  yes │ no
-   ┌──────────────┐                              │ │
-   │   work       │                              │ └────▶ need password
-   │              │                              ▼
-   └──────────────┘                       ┌──────────────┐
-                                          │   work       │
-                                          └──────────────┘
+- **First visit:** Password required.
+- **Next visits:** Leave password blank — session file is reused.
+- Session files live in `.ig_sessions/instagrapi-<username>.json`.
+
+---
+
+## Backend structure (`test.py`)
+
+The file is split into clear sections:
+
+```mermaid
+flowchart TB
+    subgraph test.py
+        S1["1. Setup\nFlask app, paths, delays"]
+        S2["2. Session\nlogin, cache clients"]
+        S3["3. Parsers\nURLs, usernames, CSV"]
+        S4["4. Scraping\nreels, comments, profiles"]
+        S5["5. Errors\nfriendly messages"]
+        S6["6. Routes\nAPI endpoints"]
+        S7["7. Run server"]
+    end
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
+```
+
+### Section 4 — important scraping functions
+
+| Function | What it does |
+|----------|----------------|
+| `fetch_single_media()` | Gets **full** metrics for one reel (views, shares, saves…) |
+| `fetch_media_comments()` | Gets all comments + replies for one reel |
+| `media_to_dict()` | Turns one reel object into a simple JSON dict |
+| `iter_user_clips_v1()` | Loads profile reels **page by page** |
+| `fetch_profile_reel_summary()` | Counts all reels + oldest/newest dates (Account Matrices) |
+| `process_reel_url()` | Handles one URL in bulk mode (success or error row) |
+
+### Why instagrapi?
+
+Instagram has two APIs:
+
+| API | Used by | Counts |
+|-----|---------|--------|
+| Web / GraphQL | Browser, some tools | Often **lower** than the app shows |
+| Mobile / private | Instagram app, **this project** | **Real** numbers |
+
+This app forces the **mobile API** (`*_v1` methods) so numbers match what you see in the app.
+
+---
+
+## API endpoints (cheat sheet)
+
+| Endpoint | Method | Used by tab | Purpose |
+|----------|--------|-------------|---------|
+| `/` | GET | All | Serves `index.html` |
+| `/api/fetch` | POST | Single reel | One reel + all comments |
+| `/api/reel_comments` | POST | Bulk / Profile | Load comments for one row on demand |
+| `/api/bulk_fetch` | POST | — | Bulk without streaming (legacy) |
+| `/api/bulk_fetch_stream` | POST | Multiple reels | Bulk with live progress |
+| `/api/profile_reels` | POST | — | All profile reels at once (non-stream) |
+| `/api/profile_reels_stream` | POST | Profile reels | Profile reels with live progress |
+| `/api/profile_stats` | POST | Account Matrices | Profile + reel count/dates only |
+| `/api/debug_node` | POST | Single reel (debug) | Raw Instagram fields for troubleshooting |
+
+---
+
+## Frontend structure (`app.js`)
+
+```mermaid
+flowchart LR
+    subgraph app.js
+        U["Utilities\nfmt, CSV, escape HTML"]
+        T["Theme\ndark / light"]
+        B["Bulk tab\nCSV upload + stream"]
+        P["Profile tab\nreel stream"]
+        M["Matrices tab\nprofile stats"]
+        S["Single tab\none reel + comments"]
+    end
+```
+
+**Live progress:** Bulk and Profile tabs use **Server-Sent Events (SSE)**. The server sends small updates (`start` → `progress`/`reel` → `complete`) and the table grows row by row.
+
+---
+
+## Example: what happens when you fetch one reel
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant app.js
+    participant test.py
+    participant IG as Instagram
+
+    You->>app.js: Click "Fetch metrics"
+    app.js->>test.py: POST /api/fetch {username, shortcode}
+    test.py->>test.py: get_client() — ensure logged in
+    test.py->>test.py: extract_shortcode(url)
+    test.py->>IG: media info (mobile API)
+    test.py->>IG: fetch all comments
+    IG-->>test.py: counts + comments
+    test.py-->>app.js: JSON {views, likes, comments, ...}
+    app.js-->>You: Update metrics + comment table
 ```
 
 ---
 
-## 8. Single Reel mode vs Profile Reels mode
+## Data you get per reel
 
-The app has two tabs. They use different scraping strategies because they have different needs.
+| Field | Meaning |
+|-------|---------|
+| Views | Play count |
+| Likes | Like count |
+| Comments | Comment count (reported by Instagram) |
+| Shares | Reshare count |
+| Saves | Save count |
+| Reposts | Repost count (when available) |
+| Date | When the reel was posted |
+| Caption | Post text (trimmed in UI) |
 
-### Single Reel
-
-- **One reel** → make **one** rich request → get **everything** (shares, saves, reposts too).
-- Slow per-reel but you only do it once.
-
-### Profile Reels
-
-- **Many reels** → can't afford one rich request per reel (Instagram would rate-limit us).
-- Instead: make **one bulk** "give me this user's reels" call.
-- That bulk call returns a lighter dataset (no shares/saves/reposts) but gives us likes/comments/views for every reel in one go.
-
-```
-                Single Reel                            Profile Reels
-                ──────────                            ──────────────
-
-         1 request → 1 reel                      1 request → N reels
-
-              full detail                            light detail
-       (likes + comments + views                 (likes + comments + views)
-        + shares + saves + reposts)
-```
-
-**Why the difference?** Instagram limits how many requests you can make per minute. If we do `N` rich requests for a profile with 200 reels, we'd burn our limit instantly. Doing 1 bulk request keeps us under the radar.
+Comments (when loaded): username, text, date, likes, reply or not.
 
 ---
 
-## 9. Running it on your machine
+## Tips & troubleshooting
 
-The first time:
+| Problem | Try this |
+|---------|----------|
+| "Login required" | Enter password again — session expired |
+| "Rate limited" | Wait a few minutes, fetch fewer reels |
+| Wrong / low view counts | Restart server; this app uses mobile API on purpose |
+| Account Matrices slow | Normal for accounts with many reels (counts all of them) |
+| API 404 | Run `python test.py` and refresh the page |
 
-```bash
-# 1. Make a virtual environment so we don't pollute system Python
-python3 -m venv .venv
-source .venv/bin/activate            # Linux / macOS
-# .venv\Scripts\activate              # Windows
+**Environment variables (optional):**
 
-# 2. Install the two libraries we need
-pip install flask instagrapi
-
-# 3. Start the server
-python test.py
-```
-
-Then open your browser to <http://127.0.0.1:5000>.
-
-To run it again later, you only need:
-
-```bash
-source .venv/bin/activate
-python test.py
-```
+- `IG_DELAY_RANGE=1,3` — delay between Instagram requests (default)
+- `IG_FAST_DELAY_RANGE=0.4,1.0` — faster delays for bulk/profile
+- `IG_PROFILE_PAGE_SIZE=50` — reels per page when loading a profile
 
 ---
 
-## 10. Common errors and what they mean
+## Summary
 
-| You see this | What it actually means | What to do |
-|---|---|---|
-| `ChallengeRequired` | Instagram doesn't recognise the device; it wants email/SMS verification. | Open the real Instagram app, confirm "It's me", retry. |
-| `BadPassword` | Wrong password (or Instagram thinks it's a bot). | Type it carefully. If correct, wait an hour and try again. |
-| `LoginRequired` | Your saved session expired. | Provide your password again — we'll save a fresh session. |
-| `PleaseWaitFewMinutes` | You sent too many requests too fast. | Wait 5–10 minutes. Use smaller `Max Reels` values. |
-| `UserNotFound` | The username/shortcode doesn't exist. | Check the spelling. |
-| `PrivateAccount` | The profile is private and your account doesn't follow it. | Follow the account first. |
+| Piece | Technology |
+|-------|------------|
+| Backend | Python, Flask, instagrapi |
+| Frontend | HTML, CSS, JavaScript (no framework) |
+| Login storage | JSON files in `.ig_sessions/` |
+| Live updates | Server-Sent Events (SSE) |
+| Runs on | `http://127.0.0.1:5000` (local only) |
 
----
-
-## 11. Glossary
-
-**API** — A way for one program to talk to another. Like a menu at a restaurant: it lists what you can order, and how to order it.
-
-**Cookie** — A tiny piece of data the server tells your client to remember. Instagram uses cookies to know "you logged in 5 minutes ago, no need to log in again."
-
-**Endpoint** — A specific URL on a server that does one thing. e.g. `i.instagram.com/api/v1/media/<pk>/info/` is the "get info about a single post" endpoint.
-
-**Flask** — A Python framework for building web apps. Tiny and easy. We use it to serve `index.html` and handle our 3 API routes.
-
-**GraphQL** — One particular flavour of API used by Instagram's web (browser) version. Returns less data than the mobile API.
-
-**`instagrapi`** — The Python library that talks to Instagram's mobile API on our behalf. See [Section 3](#3-what-is-instagrapi).
-
-**Mobile API** — Instagram's "back door" API used by the iPhone and Android apps. Gives us the real numbers.
-
-**`media_pk`** — Instagram's internal numeric ID for a post (e.g. `3862581467293681892`). Different from the shortcode (`DWapWEyDAjk`) — they refer to the same post but are different formats.
-
-**Rate limit** — A cap on how many requests you can make per minute. Goes up when you behave like a human, down when you behave like a bot.
-
-**Session** — Your "stamp on the wrist" — a saved login state so you don't re-enter your password every time.
-
-**Shortcode** — The slug at the end of a reel URL (`DWapWEyDAjk` in `instagram.com/reel/DWapWEyDAjk/`). Used as a human-friendly post identifier.
-
-**Virtual environment (`venv`)** — An isolated copy of Python with its own libraries. Keeps your project's dependencies separate from the rest of your computer.
-
----
-
-## Final word
-
-That's the whole project. Two files. Two APIs. One library doing the heavy lifting. If you understand:
-
-1. *Instagram has two APIs and we want the back-door one,*
-2. *`instagrapi` knocks on that back door for us,*
-3. *Flask glues the browser to `instagrapi`,*
-
-…then you understand the code. Everything else is just plumbing.
-
-Happy scraping.
+**One line:** Browser UI → Flask (`test.py`) → Instagram mobile API → tables and CSV on your screen.

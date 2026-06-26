@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- Reel Metrics UI — local Flask app (python test.py → http://127.0.0.1:5000) -->
 <html lang="en" data-theme="dark">
 
 <head>
@@ -335,26 +336,6 @@
           </div>
 
           <div id="results-profile" class="results">
-            <div class="section-title">Profile</div>
-            <div class="kv">
-              <div class="k">Username</div>
-              <div class="v" id="p_username">-</div>
-              <div class="k">Full name</div>
-              <div class="v" id="p_fullname">-</div>
-              <div class="k">Followers</div>
-              <div class="v" id="p_followers">-</div>
-              <div class="k">Following</div>
-              <div class="v" id="p_following">-</div>
-              <div class="k">Total posts</div>
-              <div class="v" id="p_posts">-</div>
-              <div class="k">Oldest reel</div>
-              <div class="v"><span id="p_oldest">—</span><span class="muted-inline" id="p_oldest_full"></span></div>
-              <div class="k">Latest reel</div>
-              <div class="v"><span id="p_latest">—</span><span class="muted-inline" id="p_latest_full"></span></div>
-              <div class="k">Reel date span</div>
-              <div class="v" id="p_span">—</div>
-            </div>
-
             <div class="section-title">Reels</div>
             <div class="summary">
               <div class="pill">Loaded: <b id="s_count">0</b></div>
@@ -387,22 +368,13 @@
           </div>
         </div>
 
-        <!-- Account Matrices pane -->
+        <!-- Account Matrices pane (profile stats only — no reels) -->
         <div class="pane" id="pane-matrices">
           <form id="f-matrices">
-            <div class="row">
-              <div class="field">
-                <label for="target-matrices">Instagram username</label>
-                <input id="target-matrices" name="target" type="text" placeholder="@username" />
-              </div>
-              <div class="field">
-                <label for="limit-matrices">Reels to fetch</label>
-                <input id="limit-matrices" name="limit" type="text" placeholder="20" value="20" />
-              </div>
-            </div>
+            <label for="target-matrices">Instagram username</label>
+            <input id="target-matrices" name="target" type="text" placeholder="@username" />
             <div class="hint">
-              <span>Enter the Instagram username only (e.g. <code>@username</code>). Profile URLs and reel links are not accepted.
-                Higher counts may trigger rate limits.</span>
+              <span>Enter the Instagram username only (e.g. <code>@username</code>). Profile URLs and reel links are not accepted.</span>
             </div>
             <button id="go-matrices" type="submit" class="btn-action btn-full">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -417,20 +389,9 @@
 
           <div id="status-matrices" class="status"></div>
 
-          <div id="progress-matrices" class="progress-bar-wrap">
-            <div class="progress-meta">
-              <div class="label" id="progress-matrices-label">Preparing…</div>
-              <span id="progress-matrices-count">0 / 0</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" id="progress-matrices-fill"></div>
-            </div>
-            <div id="progress-matrices-pct">0%</div>
-          </div>
-
           <div id="results-matrices" class="results">
-            <div class="section-title">Profile</div>
-            <div class="kv">
+            <div class="section-title">Profile matrices</div>
+            <div class="kv" id="matrices-kv">
               <div class="k">Username</div>
               <div class="v" id="a_username">-</div>
               <div class="k">Full name</div>
@@ -441,50 +402,34 @@
               <div class="v" id="a_following">-</div>
               <div class="k">Total posts</div>
               <div class="v" id="a_posts">-</div>
+              <div class="k">Total reels</div>
+              <div class="v" id="a_total_reels">-</div>
               <div class="k">Oldest reel</div>
-              <div class="v"><span id="a_oldest">—</span><span class="muted-inline" id="a_oldest_full"></span></div>
+              <div class="v"><span id="a_oldest_reel">—</span><span class="muted-inline" id="a_oldest_reel_full"></span></div>
               <div class="k">Latest reel</div>
-              <div class="v"><span id="a_latest">—</span><span class="muted-inline" id="a_latest_full"></span></div>
-              <div class="k">Reel date span</div>
-              <div class="v" id="a_span">—</div>
+              <div class="v"><span id="a_latest_reel">—</span><span class="muted-inline" id="a_latest_reel_full"></span></div>
+              <div class="k">Verified</div>
+              <div class="v" id="a_verified">-</div>
+              <div class="k">Private account</div>
+              <div class="v" id="a_private">-</div>
+              <div class="k">Business account</div>
+              <div class="v" id="a_business">-</div>
+              <div class="k">Category</div>
+              <div class="v" id="a_category">-</div>
+              <div class="k">Biography</div>
+              <div class="v" id="a_biography">-</div>
+              <div class="k">External URL</div>
+              <div class="v" id="a_external">-</div>
+              <div class="k">Profile URL</div>
+              <div class="v"><a id="a_profile_url" href="#" target="_blank" rel="noreferrer">-</a></div>
             </div>
-
-            <div class="section-title">Reels</div>
-            <div class="summary">
-              <div class="pill">Loaded: <b id="a_count">0</b></div>
-              <div class="pill">Failed: <b id="a_failed">0</b></div>
-              <div class="pill">Total views: <b id="a_views">0</b></div>
-              <div class="pill">Total likes: <b id="a_likes">0</b></div>
-              <div class="pill">Total comments: <b id="a_comments">0</b></div>
-              <div class="pill">Comments loaded: <b id="ac_count">0</b></div>
-            </div>
-            <div class="table-wrap">
-              <table class="matrices-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Date</th>
-                    <th>Reel URL</th>
-                    <th class="num">Views</th>
-                    <th class="num">Likes</th>
-                    <th class="num">Comments</th>
-                    <th class="num">Fetched</th>
-                    <th>Caption</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="matrices-tbody"></tbody>
-              </table>
-            </div>
-            <div id="matrices-errors" class="error-summary"></div>
-            <button type="button" id="download-matrices-csv" class="btn-download">Download CSV</button>
           </div>
         </div>
       </section>
 
     </div>
   </div>
-  <script src="/static/js/app.js?v=16" defer></script>
+  <script src="/static/js/app.js?v=20" defer></script>
 </body>
 
 </html>
