@@ -1071,3 +1071,22 @@ td.url-cell {
   word-break: break-all;
   font-size: 11px;
 }
+
+.matrices-table th,
+.matrices-table td,
+.bulk-table th,
+.bulk-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.matrices-table td.num,
+.bulk-table td.num {
+  text-align: center;
+}
+
+.matrices-table td.url-cell a,
+.bulk-table td.url-cell a {
+  display: inline-block;
+  text-align: center;
+}

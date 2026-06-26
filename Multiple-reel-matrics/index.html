@@ -23,7 +23,7 @@
             </svg>
           </div>
           <div>
-            <h1>Reel Metrics</h1>
+            <h1>Instagram Scraper</h1>
             <p class="sub">Processed locally on your device</p>
           </div>
         </div>
@@ -92,6 +92,17 @@
             </svg>
             Single reel
           </div>
+          <div class="tab" data-tab="bulk">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+            Multiple reels
+          </div>
           <div class="tab" data-tab="profile">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
               stroke-linejoin="round">
@@ -100,38 +111,25 @@
             </svg>
             Profile reels
           </div>
+          <div class="tab" data-tab="matrices">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+            Account Matrices
+          </div>
         </div>
 
         <!-- Single Reel pane -->
         <div class="pane active" id="pane-single">
-          <div class="seg-control" role="radiogroup" aria-label="Processing mode">
-            <label class="seg-opt">
-              <input type="radio" name="single-mode" value="single" checked />
-              <span>Single reel</span>
-            </label>
-            <label class="seg-opt">
-              <input type="radio" name="single-mode" value="bulk" />
-              <span>Multiple reels (CSV)</span>
-            </label>
-          </div>
-
           <form id="f-single">
-            <div id="single-url-wrap">
-              <label for="shortcode">Reel or post URL</label>
-              <input id="shortcode" name="shortcode" type="text"
-                placeholder="https://www.instagram.com/reel/ABC123xyz/" />
-              <div class="hint">
-                <span>Paste the full link from your browser, or enter just the shortcode.</span>
-              </div>
-            </div>
-
-            <div id="bulk-csv-wrap" class="hidden">
-              <label for="csv-file">CSV file</label>
-              <input id="csv-file" name="csv" type="file" accept=".csv,text/csv" />
-              <div class="hint">
-                <span>Add one reel URL per row, or use a column named <code>url</code>, <code>link</code>, or
-                  <code>reel_url</code>.</span>
-              </div>
+            <label for="shortcode">Reel or post URL</label>
+            <input id="shortcode" name="shortcode" type="text"
+              placeholder="https://www.instagram.com/reel/ABC123xyz/" />
+            <div class="hint">
+              <span>Paste the full link from your browser, or enter just the shortcode.</span>
             </div>
 
             <div class="btn-row" id="single-actions">
@@ -154,17 +152,6 @@
               </button>
             </div>
           </form>
-
-          <div id="progress-bulk" class="progress-bar-wrap">
-            <div class="progress-meta">
-              <div class="label" id="progress-label">Preparing…</div>
-              <span id="progress-count">0 / 0</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" id="progress-fill"></div>
-            </div>
-            <div id="progress-pct">0%</div>
-          </div>
 
           <div id="debug-box"></div>
           <div id="status-single" class="status"></div>
@@ -239,6 +226,40 @@
               <button type="button" id="comments-next">Next</button>
             </div>
           </div>
+        </div>
+
+        <!-- Multiple Reels pane -->
+        <div class="pane" id="pane-bulk">
+          <form id="f-bulk">
+            <label for="csv-file">CSV file</label>
+            <input id="csv-file" name="csv" type="file" accept=".csv,text/csv" />
+            <div class="hint">
+              <span>Add one reel URL per row, or use a column named <code>url</code>, <code>link</code>, or
+                <code>reel_url</code>.</span>
+            </div>
+            <button id="go-bulk" type="submit" class="btn-action btn-full">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              <span class="btn-label">Process CSV</span>
+            </button>
+          </form>
+
+          <div id="status-bulk" class="status"></div>
+
+          <div id="progress-bulk" class="progress-bar-wrap">
+            <div class="progress-meta">
+              <div class="label" id="progress-label">Preparing…</div>
+              <span id="progress-count">0 / 0</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div id="progress-pct">0%</div>
+          </div>
 
           <div id="results-bulk" class="results">
             <div class="section-title">Bulk processing summary</div>
@@ -248,7 +269,7 @@
               <div class="pill">Failed: <b id="b_failed">0</b></div>
             </div>
             <div class="table-wrap">
-              <table>
+              <table class="bulk-table">
                 <thead>
                   <tr>
                     <th>#</th>
@@ -365,11 +386,105 @@
             <button type="button" id="download-profile-csv" class="btn-download">Download CSV</button>
           </div>
         </div>
+
+        <!-- Account Matrices pane -->
+        <div class="pane" id="pane-matrices">
+          <form id="f-matrices">
+            <div class="row">
+              <div class="field">
+                <label for="target-matrices">Instagram username</label>
+                <input id="target-matrices" name="target" type="text" placeholder="@username" />
+              </div>
+              <div class="field">
+                <label for="limit-matrices">Reels to fetch</label>
+                <input id="limit-matrices" name="limit" type="text" placeholder="20" value="20" />
+              </div>
+            </div>
+            <div class="hint">
+              <span>Enter the Instagram username only (e.g. <code>@username</code>). Profile URLs and reel links are not accepted.
+                Higher counts may trigger rate limits.</span>
+            </div>
+            <button id="go-matrices" type="submit" class="btn-action btn-full">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span class="btn-label">Fetch account matrices</span>
+            </button>
+          </form>
+
+          <div id="status-matrices" class="status"></div>
+
+          <div id="progress-matrices" class="progress-bar-wrap">
+            <div class="progress-meta">
+              <div class="label" id="progress-matrices-label">Preparing…</div>
+              <span id="progress-matrices-count">0 / 0</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-matrices-fill"></div>
+            </div>
+            <div id="progress-matrices-pct">0%</div>
+          </div>
+
+          <div id="results-matrices" class="results">
+            <div class="section-title">Profile</div>
+            <div class="kv">
+              <div class="k">Username</div>
+              <div class="v" id="a_username">-</div>
+              <div class="k">Full name</div>
+              <div class="v" id="a_fullname">-</div>
+              <div class="k">Followers</div>
+              <div class="v" id="a_followers">-</div>
+              <div class="k">Following</div>
+              <div class="v" id="a_following">-</div>
+              <div class="k">Total posts</div>
+              <div class="v" id="a_posts">-</div>
+              <div class="k">Oldest reel</div>
+              <div class="v"><span id="a_oldest">—</span><span class="muted-inline" id="a_oldest_full"></span></div>
+              <div class="k">Latest reel</div>
+              <div class="v"><span id="a_latest">—</span><span class="muted-inline" id="a_latest_full"></span></div>
+              <div class="k">Reel date span</div>
+              <div class="v" id="a_span">—</div>
+            </div>
+
+            <div class="section-title">Reels</div>
+            <div class="summary">
+              <div class="pill">Loaded: <b id="a_count">0</b></div>
+              <div class="pill">Failed: <b id="a_failed">0</b></div>
+              <div class="pill">Total views: <b id="a_views">0</b></div>
+              <div class="pill">Total likes: <b id="a_likes">0</b></div>
+              <div class="pill">Total comments: <b id="a_comments">0</b></div>
+              <div class="pill">Comments loaded: <b id="ac_count">0</b></div>
+            </div>
+            <div class="table-wrap">
+              <table class="matrices-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Date</th>
+                    <th>Reel URL</th>
+                    <th class="num">Views</th>
+                    <th class="num">Likes</th>
+                    <th class="num">Comments</th>
+                    <th class="num">Fetched</th>
+                    <th>Caption</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="matrices-tbody"></tbody>
+              </table>
+            </div>
+            <div id="matrices-errors" class="error-summary"></div>
+            <button type="button" id="download-matrices-csv" class="btn-download">Download CSV</button>
+          </div>
+        </div>
       </section>
 
     </div>
   </div>
-  <script src="/static/js/app.js?v=12" defer></script>
+  <script src="/static/js/app.js?v=16" defer></script>
 </body>
 
 </html>

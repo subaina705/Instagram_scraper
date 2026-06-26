@@ -69,6 +69,7 @@ from instagrapi.exceptions import (
     UserNotFound,
 )
 from instagrapi.extractors import extract_comment
+from instagrapi.utils.ids import InstagramIdCodec
 
 # Project paths (computed once at import time).
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -302,6 +303,49 @@ def resolve_target_username(cl: Client, value: str) -> str:
 # truncated viewer-filtered counts we want to avoid.
 
 
+def _media_shortcode(media) -> Optional[str]:
+    """Return the web shortcode for a Media object (pk-encoded code is authoritative)."""
+    code = getattr(media, "code", None)
+    pk = getattr(media, "pk", None)
+    if pk is not None:
+        pk_code = InstagramIdCodec.encode(str(pk))
+        if not code or code != pk_code:
+            return pk_code
+    return code
+
+
+def build_instagram_media_url(
+    *,
+    code: Optional[str] = None,
+    pk=None,
+    product_type: Optional[str] = None,
+    media_type: Optional[int] = None,
+) -> str:
+    """
+    Build a canonical Instagram permalink.
+
+    Profile clips can include feed videos (product_type=feed) alongside reels
+    (product_type=clips). Using /reel/ for feed videos can open the wrong post;
+    /p/ is the stable permalink for non-clips media.
+    """
+    shortcode = (code or "").strip()
+    if pk is not None:
+        pk_code = InstagramIdCodec.encode(str(pk))
+        shortcode = pk_code if not shortcode or shortcode != pk_code else shortcode
+    if not shortcode:
+        return ""
+
+    pt = (product_type or "").lower()
+    if pt == "clips":
+        segment = "reel"
+    elif pt == "igtv":
+        segment = "tv"
+    else:
+        segment = "p"
+
+    return f"https://www.instagram.com/{segment}/{shortcode}/"
+
+
 def media_to_dict(media) -> dict:
     """
     Light-weight extraction for the profile-reels table.
@@ -309,15 +353,27 @@ def media_to_dict(media) -> dict:
     """
     taken_at = getattr(media, "taken_at", None)
     views = getattr(media, "play_count", None) or getattr(media, "view_count", None)
+    product_type = getattr(media, "product_type", None)
+    media_type = getattr(media, "media_type", 0)
+    shortcode = _media_shortcode(media)
+    url = build_instagram_media_url(
+        code=shortcode,
+        pk=getattr(media, "pk", None),
+        product_type=product_type,
+        media_type=media_type,
+    )
 
     return {
-        "shortcode": getattr(media, "code", None),
+        "shortcode": shortcode,
+        "url": url,
+        "reel_url": url,
+        "product_type": product_type,
         "owner": media.user.username if getattr(media, "user", None) else None,
         "views": int(views) if views else None,
         "likes": int(getattr(media, "like_count", 0) or 0),
         "comments": int(getattr(media, "comment_count", 0) or 0),
         "date": taken_at.strftime("%Y-%m-%d %H:%M:%S") if taken_at else None,
-        "is_video": getattr(media, "media_type", 0) == 2,  # 1=photo 2=video 8=album
+        "is_video": media_type == 2,  # 1=photo 2=video 8=album
         "caption": getattr(media, "caption_text", "") or "",
     }
 
@@ -402,8 +458,26 @@ def fetch_single_media(cl: Client, media_pk) -> dict:
         or item.get("view_count")
     )
 
+    product_type = item.get("product_type")
+    media_type = item.get("media_type")
+    pk = item.get("pk") or item.get("id")
+    shortcode = item.get("code")
+    if pk is not None:
+        pk_code = InstagramIdCodec.encode(str(pk).split("_", 1)[0])
+        if not shortcode or shortcode != pk_code:
+            shortcode = pk_code
+    url = build_instagram_media_url(
+        code=shortcode,
+        pk=pk,
+        product_type=product_type,
+        media_type=media_type,
+    )
+
     return {
-        "shortcode": item.get("code"),
+        "shortcode": shortcode,
+        "url": url,
+        "reel_url": url,
+        "product_type": product_type,
         "owner":     user_obj.get("username"),
         "likes":     _as_int(item.get("like_count")),
         "comments":  _as_int(item.get("comment_count")),
@@ -413,7 +487,7 @@ def fetch_single_media(cl: Client, media_pk) -> dict:
         "saves":     _as_int(item.get("save_count")),
         "reposts":   _extract_repost_count(item),
         "date":      date_str,
-        "is_video":  item.get("media_type") == 2,
+        "is_video":  media_type == 2,
         "caption":   caption_text,
     }
 
@@ -924,6 +998,9 @@ def api_fetch():
         return jsonify(
             ok=True,
             shortcode=m["shortcode"] or shortcode,
+            url=m.get("url"),
+            reel_url=m.get("reel_url"),
+            product_type=m.get("product_type"),
             ig_views=m["ig_views"],
             owner=m["owner"],
             is_video=m["is_video"],
