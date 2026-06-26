@@ -82,21 +82,16 @@
 
     .app-wrap {
       min-height: 100vh;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding: 32px 20px 48px;
+      width: 100%;
     }
 
     .app-card {
       width: 100%;
-      max-width: 900px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: var(--shadow);
-      transition: background 0.2s, box-shadow 0.2s;
+      max-width: none;
+      background: var(--bg);
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
     }
 
     /* ---- Header ---- */
@@ -105,7 +100,7 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      padding: 24px 24px 0;
+      padding: 24px 40px 0;
     }
 
     .brand {
@@ -220,7 +215,7 @@
 
     /* ---- Auth ---- */
     .auth-section {
-      padding: 20px 24px 0;
+      padding: 20px 40px 0;
     }
 
     .row {
@@ -305,7 +300,7 @@
 
     /* ---- Workspace ---- */
     .workspace {
-      margin: 20px 24px 24px;
+      margin: 20px 40px 40px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -532,59 +527,6 @@
       opacity: 1;
     }
 
-    /* ---- Profile stat cards ---- */
-    .profile-stats {
-      display: none;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border);
-    }
-
-    .profile-stats.show {
-      display: grid;
-    }
-
-    @media (max-width: 560px) {
-      .profile-stats {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    .stat-card {
-      background: var(--surface-3);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px 14px 12px;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.2s;
-    }
-
-    .stat-accent {
-      width: 28px;
-      height: 3px;
-      background: var(--accent);
-      border-radius: 2px;
-      margin-bottom: 12px;
-    }
-
-    .stat-card .stat-v {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--text);
-      font-variant-numeric: tabular-nums;
-      line-height: 1.2;
-    }
-
-    .stat-card .stat-k {
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--muted);
-      margin-top: 4px;
-    }
-
     /* ---- Results ---- */
     .results {
       margin-top: 24px;
@@ -796,6 +738,166 @@
       background: var(--err-bg);
       color: var(--err);
       border: 1px solid var(--err-border);
+    }
+
+    .comment-reply td:first-child {
+      padding-left: 28px;
+      color: var(--muted);
+    }
+
+    .comment-user {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .comment-user span {
+      font-weight: 400;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .comment-text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-width: 480px;
+    }
+
+    .btn-show-comments {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn-show-comments:hover {
+      background: var(--surface-3);
+    }
+
+    .btn-show-comments.active {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .reel-comments-row {
+      display: none;
+    }
+
+    .reel-comments-row.show {
+      display: table-row;
+    }
+
+    .reel-comments-row > td {
+      padding: 0 !important;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+
+    .reel-comments-panel {
+      padding: 14px 16px 16px;
+      border-left: 3px solid var(--accent);
+    }
+
+    .reel-comments-meta {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 10px;
+    }
+
+    .reel-comments-empty {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 8px 0;
+    }
+
+    .reel-comments-table-wrap {
+      border-radius: 6px;
+      max-height: 420px;
+      overflow-y: auto;
+    }
+
+    .reel-comments-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .reel-comments-table th {
+      position: sticky;
+      top: 0;
+      background: var(--surface-3);
+      z-index: 1;
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .reel-comments-table td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .reel-comments-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .reel-comments-table tr.reel-comment-reply td:first-child {
+      padding-left: 24px;
+      color: var(--muted);
+    }
+
+    .reel-comments-table .comment-text {
+      max-width: none;
+    }
+
+    .comments-pagination {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .comments-pagination.show {
+      display: flex;
+    }
+
+    .comments-pagination button {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+
+    .comments-pagination button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .comments-page-info {
+      font-size: 13px;
+      color: var(--muted);
+      min-width: 120px;
+      text-align: center;
     }
 
     .progress-bar-wrap {
@@ -1121,6 +1223,31 @@
               <div class="k">URL</div>
               <div class="v"><a id="d_url" href="#" target="_blank" rel="noreferrer">-</a></div>
             </div>
+
+            <div class="section-title">Comments</div>
+            <div class="summary" id="single-comments-summary">
+              <div class="pill">Fetched: <b id="c_count">0</b></div>
+              <div class="pill">Reported total: <b id="c_reported">-</b></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>User</th>
+                    <th>Date</th>
+                    <th class="num">Likes</th>
+                    <th>Comment</th>
+                  </tr>
+                </thead>
+                <tbody id="comments-tbody"></tbody>
+              </table>
+            </div>
+            <div class="comments-pagination" id="comments-pagination">
+              <button type="button" id="comments-prev">Previous</button>
+              <span class="comments-page-info" id="comments-page-info">Page 1 of 1</span>
+              <button type="button" id="comments-next">Next</button>
+            </div>
           </div>
 
           <div id="results-bulk" class="results">
@@ -1184,29 +1311,6 @@
 
           <div id="status-profile" class="status"></div>
 
-          <div class="profile-stats" id="profile-stats">
-            <div class="stat-card">
-              <div class="stat-accent"></div>
-              <div class="stat-v" id="ps_reels"></div>
-              <div class="stat-k">Reels fetched</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-accent"></div>
-              <div class="stat-v" id="ps_avg_views"></div>
-              <div class="stat-k">Avg. views</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-accent"></div>
-              <div class="stat-v" id="ps_avg_likes"></div>
-              <div class="stat-k">Avg. likes</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-accent"></div>
-              <div class="stat-v" id="ps_avg_shares"></div>
-              <div class="stat-k">Avg. shares</div>
-            </div>
-          </div>
-
           <div id="results-profile" class="results">
             <div class="section-title">Profile</div>
             <div class="kv">
@@ -1234,6 +1338,7 @@
               <div class="pill">Total views: <b id="s_views">0</b></div>
               <div class="pill">Total likes: <b id="s_likes">0</b></div>
               <div class="pill">Total comments: <b id="s_comments">0</b></div>
+              <div class="pill">Comments loaded: <b id="pc_count">0</b></div>
             </div>
             <div class="table-wrap">
               <table>
@@ -1245,12 +1350,15 @@
                     <th class="num">Views</th>
                     <th class="num">Likes</th>
                     <th class="num">Comments</th>
+                    <th class="num">Fetched</th>
                     <th>Caption</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="reels-tbody"></tbody>
               </table>
             </div>
+            <button type="button" id="download-profile-csv" class="btn-download">Download CSV</button>
           </div>
         </div>
       </section>
@@ -1292,6 +1400,11 @@
 
     // ---- Rest of original JS ----
     let bulkResults = [];
+    let profileResults = [];
+    let profileMeta = null;
+    let singleComments = [];
+    let commentsPage = 1;
+    const COMMENTS_PER_PAGE = 15;
 
     function isBulkMode() {
       return document.querySelector('input[name="single-mode"]:checked')?.value === 'bulk';
@@ -1337,6 +1450,48 @@
     }
 
     $('download-csv').addEventListener('click', downloadBulkCsv);
+
+    function buildProfileReelsCsv(reels) {
+      const headers = [
+        'Reel URL', 'Shortcode', 'Reel Date', 'Reel Views', 'Reel Likes', 'Reel Comment Count',
+        'Comment #', 'Comment User', 'Comment Date', 'Comment Likes', 'Is Reply', 'Comment Text',
+      ];
+      const lines = [headers.map(csvEscape).join(',')];
+      for (const reel of reels) {
+        const url = reel.shortcode ? `https://www.instagram.com/reel/${reel.shortcode}/` : '';
+        const base = [url, reel.shortcode ?? '', reel.date ?? '', reel.views ?? '', reel.likes ?? '', reel.comments ?? ''];
+        const comments = reel.reel_comments || [];
+        if (!comments.length) {
+          lines.push([...base, '', '', '', '', '', 'No comments'].map(csvEscape).join(','));
+          continue;
+        }
+        comments.forEach((c, i) => {
+          lines.push([
+            ...base,
+            i + 1,
+            c.username ?? '',
+            c.date ?? '',
+            c.likes ?? '',
+            c.is_reply ? 'Yes' : 'No',
+            c.text ?? '',
+          ].map(csvEscape).join(','));
+        });
+      }
+      return lines.join('\n');
+    }
+
+    function downloadProfileCsv() {
+      if (!profileResults.length) return;
+      const username = profileMeta?.username || 'profile';
+      const blob = new Blob([buildProfileReelsCsv(profileResults)], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `profile-reels-${username}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    $('download-profile-csv').addEventListener('click', downloadProfileCsv);
 
     function renderBulkResults(data) {
       bulkResults = data.results || [];
@@ -1433,22 +1588,172 @@
       }
     }
 
-    function updateProfileStats(reels) {
-      const container = $('profile-stats');
-      const n = reels.length;
-      if (!n) { container.classList.remove('show'); return; }
-      let totViews = 0, totLikes = 0, totShares = 0, shareCount = 0;
-      reels.forEach(r => {
-        totViews += (r.views || 0);
-        totLikes += (r.likes || 0);
-        if (r.shares != null) { totShares += r.shares; shareCount++; }
-      });
-      $('ps_reels').textContent = fmt(n);
-      $('ps_avg_views').textContent = fmt(Math.round(totViews / n));
-      $('ps_avg_likes').textContent = fmt(Math.round(totLikes / n));
-      $('ps_avg_shares').textContent = shareCount ? fmt(Math.round(totShares / shareCount)) : '0';
-      container.classList.add('show');
+    function buildReelCommentsPanel(comments) {
+      if (!comments || !comments.length) {
+        return '<div class="reel-comments-panel"><p class="reel-comments-empty">No comments found for this reel.</p></div>';
+      }
+      const rows = comments.map((c, i) => {
+        const userLabel = c.username
+          ? `<span class="comment-user">@${esc(c.username)}${c.full_name ? ` <span>(${esc(c.full_name)})</span>` : ''}</span>`
+          : '—';
+        const prefix = c.is_reply ? '↳ ' : '';
+        const rowClass = c.is_reply ? 'reel-comment-reply' : '';
+        return `<tr class="${rowClass}"><td>${i + 1}</td><td>${userLabel}</td><td>${esc(c.date) || '—'}</td><td class="num">${fmt(c.likes)}</td><td class="comment-text">${prefix}${esc(c.text)}</td></tr>`;
+      }).join('');
+      return `<div class="reel-comments-panel">
+        <div class="reel-comments-meta">${comments.length} comment${comments.length === 1 ? '' : 's'}</div>
+        <div class="table-wrap reel-comments-table-wrap">
+          <table class="reel-comments-table">
+            <thead><tr><th>#</th><th>User</th><th>Date</th><th class="num">Likes</th><th>Comment</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
     }
+
+    function toggleReelComments(btn) {
+      const mainRow = btn.closest('tr');
+      const detailRow = mainRow?.nextElementSibling;
+      if (!detailRow?.classList.contains('reel-comments-row')) return;
+      const open = detailRow.classList.toggle('show');
+      const count = btn.dataset.count || '0';
+      btn.textContent = open ? `Hide Comments (${count})` : `Show Comments (${count})`;
+      btn.classList.toggle('active', open);
+      if (open) detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    $('reels-tbody').addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-show-comments');
+      if (btn) toggleReelComments(btn);
+    });
+
+    function countProfileComments(reels) {
+      return (reels || []).reduce((sum, r) => sum + (r.reel_comments?.length || 0), 0);
+    }
+
+    function renderProfileResults(data) {
+      $('p_username').textContent = data.profile.username || '-';
+      $('p_fullname').textContent = data.profile.full_name || '-';
+      $('p_followers').textContent = fmt(data.profile.followers);
+      $('p_following').textContent = fmt(data.profile.following);
+      $('p_posts').textContent = fmt(data.profile.posts);
+      const dr = data.date_range || {}, hasDates = dr.count > 0;
+      $('p_oldest').textContent = hasDates ? dr.oldest_date : '—';
+      $('p_oldest_full').textContent = hasDates ? `(${dr.oldest_display})` : '';
+      $('p_latest').textContent = hasDates ? dr.newest_date : '—';
+      $('p_latest_full').textContent = hasDates ? `(${dr.newest_display})` : '';
+      $('p_span').textContent = hasDates ? (dr.span_days === 0 ? `Single day · ${dr.count} reel${dr.count === 1 ? '' : 's'} analyzed` : `${dr.span_days.toLocaleString()} day${dr.span_days === 1 ? '' : 's'} · ${dr.count} reels analyzed`) : '—';
+
+      const tbody = $('reels-tbody');
+      tbody.innerHTML = '';
+      if (!data.reels.length) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="9" style="text-align:center;color:var(--muted);padding:24px;">No reels found for this profile.</td>`;
+        tbody.appendChild(tr);
+      }
+
+      let totViews = 0, totLikes = 0, totComments = 0, totFetched = 0;
+      data.reels.forEach((reel, i) => {
+        totViews += (reel.views || 0);
+        totLikes += (reel.likes || 0);
+        totComments += (reel.comments || 0);
+        const fetched = reel.comments_fetched ?? (reel.reel_comments?.length || 0);
+        totFetched += fetched;
+        const url = 'https://www.instagram.com/reel/' + reel.shortcode + '/';
+        const comments = reel.reel_comments || [];
+
+        const mainTr = document.createElement('tr');
+        mainTr.className = 'reel-row';
+        mainTr.innerHTML = `<td>${i + 1}</td><td>${reel.date || '-'}</td><td><a href="${url}" target="_blank" rel="noreferrer">${reel.shortcode}</a></td><td class="num">${fmt(reel.views)}</td><td class="num">${fmt(reel.likes)}</td><td class="num">${fmt(reel.comments)}</td><td class="num">${fmt(fetched)}</td><td>${esc((reel.caption || '').slice(0, 200))}</td><td><button type="button" class="btn-show-comments" data-count="${fetched}">Show Comments (${fetched})</button></td>`;
+        tbody.appendChild(mainTr);
+
+        const detailTr = document.createElement('tr');
+        detailTr.className = 'reel-comments-row';
+        detailTr.innerHTML = `<td colspan="9">${buildReelCommentsPanel(comments)}</td>`;
+        tbody.appendChild(detailTr);
+      });
+
+      $('s_count').textContent = data.reels.length;
+      $('s_views').textContent = fmt(totViews);
+      $('s_likes').textContent = fmt(totLikes);
+      $('s_comments').textContent = fmt(totComments);
+      $('pc_count').textContent = fmt(totFetched);
+
+      profileResults = data.reels || [];
+      profileMeta = data.profile || null;
+    }
+
+    function renderCommentsPage() {
+      const tbody = $('comments-tbody');
+      const pagination = $('comments-pagination');
+      tbody.innerHTML = '';
+
+      if (!singleComments.length) {
+        pagination.classList.remove('show');
+        return;
+      }
+
+      const totalPages = Math.max(1, Math.ceil(singleComments.length / COMMENTS_PER_PAGE));
+      if (commentsPage > totalPages) commentsPage = totalPages;
+      if (commentsPage < 1) commentsPage = 1;
+
+      const start = (commentsPage - 1) * COMMENTS_PER_PAGE;
+      const pageItems = singleComments.slice(start, start + COMMENTS_PER_PAGE);
+
+      pageItems.forEach((c, i) => {
+        const tr = document.createElement('tr');
+        if (c.is_reply) tr.classList.add('comment-reply');
+        const userLabel = c.username
+          ? `<span class="comment-user">@${esc(c.username)}${c.full_name ? ` <span>(${esc(c.full_name)})</span>` : ''}</span>`
+          : '—';
+        const prefix = c.is_reply ? '↳ ' : '';
+        tr.innerHTML = `<td>${start + i + 1}</td><td>${userLabel}</td><td>${esc(c.date) || '—'}</td><td class="num">${fmt(c.likes)}</td><td class="comment-text">${prefix}${esc(c.text)}</td>`;
+        tbody.appendChild(tr);
+      });
+
+      $('comments-page-info').textContent = `Page ${commentsPage} of ${totalPages}`;
+      $('comments-prev').disabled = commentsPage <= 1;
+      $('comments-next').disabled = commentsPage >= totalPages;
+      pagination.classList.toggle('show', totalPages > 1);
+    }
+
+    function renderSingleComments(data) {
+      const comments = data.reel_comments || [];
+      singleComments = comments;
+      commentsPage = 1;
+      $('c_count').textContent = fmt(data.comments_fetched ?? comments.length);
+      $('c_reported').textContent = fmt(data.comments);
+
+      if (!comments.length) {
+        const tbody = $('comments-tbody');
+        tbody.innerHTML = '';
+        let msg = 'No comments found for this reel.';
+        if (data.comments_note === 'comments_disabled') msg = 'Comments are disabled on this reel.';
+        else if (data.comments_note === 'comments_unavailable') msg = 'Comments are unavailable for this reel.';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">${esc(msg)}</td>`;
+        tbody.appendChild(tr);
+        $('comments-pagination').classList.remove('show');
+        return;
+      }
+
+      renderCommentsPage();
+    }
+
+    $('comments-prev').addEventListener('click', () => {
+      if (commentsPage > 1) {
+        commentsPage--;
+        renderCommentsPage();
+      }
+    });
+
+    $('comments-next').addEventListener('click', () => {
+      const totalPages = Math.ceil(singleComments.length / COMMENTS_PER_PAGE);
+      if (commentsPage < totalPages) {
+        commentsPage++;
+        renderCommentsPage();
+      }
+    });
 
     $('f-single').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1460,6 +1765,7 @@
       setBtnLoading(btn, true, 'Fetch metrics', 'Fetching…');
       const payload = { username: $('username').value.trim(), password: $('password').value, shortcode: $('shortcode').value.trim() };
       if (!payload.shortcode) { showStatus(status, 'err', 'Please enter a reel or post URL.'); setBtnLoading(btn, false, 'Fetch metrics'); return; }
+      showStatus(status, 'ok', 'Fetching metrics and comments — this may take a moment for popular reels…');
       try {
         const r = await fetch('/api/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await r.json();
@@ -1479,8 +1785,13 @@
           $('d_caption').textContent = data.caption || 'No Caption';
           const url = 'https://www.instagram.com/' + (data.is_video ? 'reel' : 'p') + '/' + data.shortcode + '/';
           const a = $('d_url'); a.href = url; a.textContent = url;
+          renderSingleComments(data);
           results.classList.add('show');
-          showStatus(status, 'ok', 'Metrics retrieved successfully.');
+          let statusMsg = `Metrics and ${data.comments_fetched ?? 0} comment${(data.comments_fetched ?? 0) === 1 ? '' : 's'} retrieved successfully.`;
+          if (data.comments_note === 'partial') statusMsg += ' Some comments may be missing due to an API limit.';
+          else if (data.comments_note === 'comments_disabled') statusMsg = 'Metrics retrieved. Comments are disabled on this reel.';
+          else if (data.comments_note === 'comments_unavailable') statusMsg = 'Metrics retrieved. Comments could not be loaded.';
+          showStatus(status, 'ok', statusMsg);
         }
       } catch (err) {
         showStatus(status, 'err', 'Network error: ' + err.message);
@@ -1569,52 +1880,24 @@
       const btn = $('go-profile'), status = $('status-profile'), results = $('results-profile');
       showStatus(status, '', '');
       results.classList.remove('show');
-      $('profile-stats').classList.remove('show');
+      profileResults = [];
+      profileMeta = null;
       setBtnLoading(btn, true, 'Fetch profile reels', 'Fetching…');
       const limitStr = $('limit').value.trim();
       const payload = { username: $('username').value.trim(), password: $('password').value, target: $('target').value.trim(), limit: limitStr === '' ? 20 : parseInt(limitStr, 10) || 0 };
       if (!payload.target) { showStatus(status, 'err', 'Please enter an Instagram username or profile URL.'); setBtnLoading(btn, false, 'Fetch profile reels'); return; }
-      showStatus(status, 'ok', 'Fetching reels from this profile — please wait…');
+      showStatus(status, 'ok', 'Fetching reels and all comments for each reel — this may take several minutes for large profiles…');
       try {
         const r = await fetch('/api/profile_reels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await r.json();
         if (!r.ok || !data.ok) {
           showStatus(status, 'err', 'Error: ' + (data.error || ('HTTP ' + r.status)));
         } else {
-          $('p_username').textContent = data.profile.username || '-';
-          $('p_fullname').textContent = data.profile.full_name || '-';
-          $('p_followers').textContent = fmt(data.profile.followers);
-          $('p_following').textContent = fmt(data.profile.following);
-          $('p_posts').textContent = fmt(data.profile.posts);
-          const dr = data.date_range || {}, hasDates = dr.count > 0;
-          $('p_oldest').textContent = hasDates ? dr.oldest_date : '—';
-          $('p_oldest_full').textContent = hasDates ? `(${dr.oldest_display})` : '';
-          $('p_latest').textContent = hasDates ? dr.newest_date : '—';
-          $('p_latest_full').textContent = hasDates ? `(${dr.newest_display})` : '';
-          $('p_span').textContent = hasDates ? (dr.span_days === 0 ? `Single day · ${dr.count} reel${dr.count === 1 ? '' : 's'} analyzed` : `${dr.span_days.toLocaleString()} day${dr.span_days === 1 ? '' : 's'} · ${dr.count} reels analyzed`) : '—';
-          updateProfileStats(data.reels);
-          const tbody = $('reels-tbody');
-          tbody.innerHTML = '';
-          if (!data.reels.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No reels found for this profile.</td>`;
-            tbody.appendChild(tr);
-          }
-          let totViews = 0, totLikes = 0, totComments = 0;
-          data.reels.forEach((reel, i) => {
-            totViews += (reel.views || 0); totLikes += (reel.likes || 0); totComments += (reel.comments || 0);
-            const tr = document.createElement('tr');
-            const url = 'https://www.instagram.com/reel/' + reel.shortcode + '/';
-            tr.innerHTML = `<td>${i + 1}</td><td>${reel.date || '-'}</td><td><a href="${url}" target="_blank" rel="noreferrer">${reel.shortcode}</a></td><td class="num">${fmt(reel.views)}</td><td class="num">${fmt(reel.likes)}</td><td class="num">${fmt(reel.comments)}</td><td>${(reel.caption || '').replace(/[<>&]/g, s => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[s]))}</td>`;
-            tbody.appendChild(tr);
-          });
-          $('s_count').textContent = data.reels.length;
-          $('s_views').textContent = fmt(totViews);
-          $('s_likes').textContent = fmt(totLikes);
-          $('s_comments').textContent = fmt(totComments);
+          renderProfileResults(data);
           results.classList.add('show');
+          const totalComments = countProfileComments(data.reels);
           const resolvedNote = data.resolved_target ? ` (resolved target: @${data.resolved_target})` : '';
-          showStatus(status, 'ok', `Successfully fetched ${data.reels.length} reel${data.reels.length === 1 ? '' : 's'}${resolvedNote}.`);
+          showStatus(status, 'ok', `Fetched ${data.reels.length} reel${data.reels.length === 1 ? '' : 's'} and ${totalComments} comment${totalComments === 1 ? '' : 's'}${resolvedNote}.`);
         }
       } catch (err) {
         showStatus(status, 'err', 'Network error: ' + err.message);

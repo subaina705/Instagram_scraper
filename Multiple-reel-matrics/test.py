@@ -57,12 +57,15 @@ from instagrapi.exceptions import (
     BadPassword,
     ChallengeRequired,
     ClientError,
+    CommentUnavailable,
+    CommentsDisabled,
     LoginRequired,
     PleaseWaitFewMinutes,
     PrivateAccount,
     TwoFactorRequired,
     UserNotFound,
 )
+from instagrapi.extractors import extract_comment
 
 app = Flask(__name__)
 
@@ -370,6 +373,115 @@ def fetch_single_media(cl: Client, media_pk) -> dict:
     }
 
 
+def comment_to_dict(comment, *, is_reply: bool = False, parent_pk=None) -> dict:
+    """Serialize an instagrapi Comment for the single-reel UI."""
+    user = getattr(comment, "user", None)
+    created = getattr(comment, "created_at_utc", None)
+    return {
+        "pk": str(comment.pk),
+        "username": user.username if user else None,
+        "full_name": getattr(user, "full_name", None) if user else None,
+        "text": comment.text or "",
+        "likes": comment.like_count,
+        "date": created.strftime("%Y-%m-%d %H:%M:%S") if created else None,
+        "is_reply": is_reply,
+        "parent_pk": str(parent_pk) if parent_pk else None,
+    }
+
+
+def fetch_media_comments(cl: Client, media_pk) -> tuple[list[dict], Optional[str]]:
+    """
+    Fetch every comment on a media item (top-level + replies).
+
+    Uses the same dual-cursor pagination as instagrapi's media_comments_v1_chunk:
+    pass both min_id and max_id on every page after the first, and keep going until
+    Instagram returns an empty comments array.
+    """
+    media_id = cl.media_id(str(media_pk))
+    comments: list[dict] = []
+    note: Optional[str] = None
+    min_id = ""
+    max_id = ""
+    seen_pks: set[str] = set()
+
+    def append_replies(parent_pk: str, child_count: int) -> None:
+        if not child_count:
+            return
+        try:
+            replies = cl.media_comment_replies(media_id, parent_pk, amount=0)
+        except Exception:
+            return
+        for reply in replies:
+            comments.append(comment_to_dict(reply, is_reply=True, parent_pk=parent_pk))
+
+    try:
+        for _ in range(500):  # safety cap — 500 pages × ~15 = 7500 comments max
+            params: dict = {
+                "can_support_threading": "true",
+                "permalink_enabled": "false",
+            }
+            if min_id:
+                params["min_id"] = min_id
+            if max_id:
+                params["max_id"] = max_id
+
+            result = cl.private_request(f"media/{media_id}/comments/", params)
+            page = result.get("comments") or []
+            if not page:
+                break
+
+            new_on_page = 0
+            for raw in page:
+                pk = str(raw.get("pk", ""))
+                if not pk or pk in seen_pks:
+                    continue
+                seen_pks.add(pk)
+                new_on_page += 1
+                comment = extract_comment(raw)
+                comments.append(comment_to_dict(comment))
+                append_replies(str(comment.pk), int(raw.get("child_comment_count") or 0))
+
+            if new_on_page == 0:
+                break
+
+            min_id = result.get("next_min_id") or result.get("min_id") or ""
+            max_id = result.get("next_max_id") or result.get("max_id") or ""
+
+    except CommentsDisabled:
+        return [], "comments_disabled"
+    except CommentUnavailable:
+        return [], "comments_unavailable"
+    except ClientError:
+        note = "partial" if comments else None
+        if not comments:
+            return [], "partial"
+
+    return comments, note
+
+
+def attach_reel_comments(cl: Client, media, reel_dict: dict) -> dict:
+    """Fetch all Instagram comments for one profile reel and attach them to its dict."""
+    out = dict(reel_dict)
+    out["reel_comments"] = []
+    out["comments_fetched"] = 0
+    out["comments_note"] = None
+
+    media_pk = getattr(media, "pk", None) or getattr(media, "id", None)
+    if not media_pk:
+        out["comments_note"] = "unavailable"
+        return out
+
+    try:
+        comments, note = fetch_media_comments(cl, media_pk)
+        out["reel_comments"] = comments
+        out["comments_fetched"] = len(comments)
+        out["comments_note"] = note
+    except Exception:
+        out["comments_note"] = "partial"
+
+    return out
+
+
 def compute_reel_date_range(reels_raw) -> dict:
     """
     Compute oldest / newest / span across a list of Media objects.
@@ -671,6 +783,7 @@ def api_fetch():
         shortcode = extract_shortcode(raw_code)
         media_pk = cl.media_pk_from_code(shortcode)
         m = fetch_single_media(cl, media_pk)
+        comments, comments_note = fetch_media_comments(cl, media_pk)
 
         return jsonify(
             ok=True,
@@ -679,6 +792,9 @@ def api_fetch():
             owner=m["owner"],
             is_video=m["is_video"],
             caption=(m["caption"] or "")[:500],
+            reel_comments=comments,
+            comments_fetched=len(comments),
+            comments_note=comments_note,
             **media_metric_fields(m),
         )
     except Exception as e:
@@ -825,8 +941,7 @@ def api_profile_reels():
         reels = []
         for media in reels_raw:
             try:
-                d = media_to_dict(media)
-                d["caption"] = (d["caption"] or "")[:200]
+                d = attach_reel_comments(cl, media, media_to_dict(media))
                 reels.append(d)
             except Exception as inner:
                 # One bad reel shouldn't sink the whole fetch.
@@ -835,6 +950,9 @@ def api_profile_reels():
                     "date": None, "views": None, "likes": None, "comments": None,
                     "caption": f"[error reading post: {inner}]",
                     "is_video": None,
+                    "reel_comments": [],
+                    "comments_fetched": 0,
+                    "comments_note": "partial",
                 })
 
         return jsonify(

@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV '/home/muhammad-zain-mughal/Desktop/Practive Frontend/.venv'
+set -gx VIRTUAL_ENV /home/muhammad-zain-mughal/Desktop/Instagram_scraper/Multiple-reel-matrics/.venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH
