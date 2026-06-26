@@ -260,13 +260,14 @@
                     <th class="num">Saves</th>
                     <th class="num">Reposts</th>
                     <th>Upload date</th>
-                    <th>Status</th>
-                    <th>Error</th>
+                    <th class="num">Fetched</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="bulk-tbody"></tbody>
               </table>
             </div>
+            <div id="bulk-errors" class="error-summary"></div>
             <button type="button" id="download-csv" class="btn-download">Download CSV</button>
           </div>
         </div>
@@ -301,6 +302,17 @@
 
           <div id="status-profile" class="status"></div>
 
+          <div id="progress-profile" class="progress-bar-wrap">
+            <div class="progress-meta">
+              <div class="label" id="progress-profile-label">Preparing…</div>
+              <span id="progress-profile-count">0 / 0</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-profile-fill"></div>
+            </div>
+            <div id="progress-profile-pct">0%</div>
+          </div>
+
           <div id="results-profile" class="results">
             <div class="section-title">Profile</div>
             <div class="kv">
@@ -324,7 +336,8 @@
 
             <div class="section-title">Reels</div>
             <div class="summary">
-              <div class="pill">Fetched: <b id="s_count">0</b></div>
+              <div class="pill">Loaded: <b id="s_count">0</b></div>
+              <div class="pill">Failed: <b id="p_failed">0</b></div>
               <div class="pill">Total views: <b id="s_views">0</b></div>
               <div class="pill">Total likes: <b id="s_likes">0</b></div>
               <div class="pill">Total comments: <b id="s_comments">0</b></div>
@@ -348,6 +361,7 @@
                 <tbody id="reels-tbody"></tbody>
               </table>
             </div>
+            <div id="profile-errors" class="error-summary"></div>
             <button type="button" id="download-profile-csv" class="btn-download">Download CSV</button>
           </div>
         </div>
@@ -355,7 +369,7 @@
 
     </div>
   </div>
-  <script src="/static/js/app.js" defer></script>
+  <script src="/static/js/app.js?v=12" defer></script>
 </body>
 
 </html>

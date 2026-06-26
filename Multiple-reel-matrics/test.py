@@ -49,6 +49,7 @@ import json
 import os
 import re
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -87,6 +88,45 @@ app = Flask(
 _clients: dict[str, Client] = {}
 _clients_lock = threading.Lock()
 
+# Request pacing — override via env, e.g. IG_FAST_DELAY_RANGE=0.3,0.8
+def _parse_delay_range(env_key: str, default: tuple[float, float]) -> list[float]:
+    raw = os.environ.get(env_key, "").strip()
+    if raw:
+        parts = [p.strip() for p in raw.split(",", 1)]
+        if len(parts) == 2:
+            try:
+                lo, hi = float(parts[0]), float(parts[1])
+                if 0 <= lo <= hi:
+                    return [lo, hi]
+            except ValueError:
+                pass
+    return list(default)
+
+
+_DEFAULT_DELAY = _parse_delay_range("IG_DELAY_RANGE", (1, 3))
+_FAST_DELAY = _parse_delay_range("IG_FAST_DELAY_RANGE", (0.4, 1.0))
+
+
+def _profile_clips_page_size() -> int:
+    try:
+        return max(12, int(os.environ.get("IG_PROFILE_PAGE_SIZE", "50").strip() or 50))
+    except ValueError:
+        return 50
+
+
+_PROFILE_CLIPS_PAGE_SIZE = _profile_clips_page_size()
+
+
+@contextmanager
+def _scrape_delay(cl: Client, *, fast: bool = False):
+    """Temporarily tune instagrapi's per-request sleep (bulk/profile vs single-reel)."""
+    previous = cl.delay_range
+    cl.delay_range = _FAST_DELAY if fast else _DEFAULT_DELAY
+    try:
+        yield
+    finally:
+        cl.delay_range = previous
+
 
 # =============================================================================
 # 2. SESSION MANAGEMENT
@@ -106,9 +146,8 @@ def _session_path(username: str) -> str:
 def _new_client() -> Client:
     """Create a fresh instagrapi Client with sensible defaults."""
     cl = Client()
-    # Built-in throttle: every private request waits a random 1-3 seconds.
-    # Keeps us under Instagram's per-second request limits with no code changes.
-    cl.delay_range = [1, 3]
+    # Built-in throttle between private requests (tunable via IG_DELAY_RANGE).
+    cl.delay_range = _DEFAULT_DELAY
     return cl
 
 
@@ -474,12 +513,13 @@ def reel_dict_without_comments(reel_dict: dict) -> dict:
     return out
 
 
-def iter_user_clips_v1(cl: Client, user_id, limit: int = 0, page_size: int = 12):
+def iter_user_clips_v1(cl: Client, user_id, limit: int = 0, page_size: int = _PROFILE_CLIPS_PAGE_SIZE):
     """
     Yield profile reels page-by-page from Instagram (progressive fetch).
 
     Uses user_clips_paginated_v1 so callers can process each page as it arrives
     instead of waiting for user_clips_v1 to download every page first.
+    Default page_size matches the Instagram app (~50 reels per request).
     """
     next_cursor = ""
     yielded = 0
@@ -684,7 +724,13 @@ def parse_urls_from_csv(file_bytes: bytes) -> list[str]:
     return urls
 
 
-def process_reel_url(cl: Client, raw_code: str, *, fetch_comments: bool = True) -> dict:
+def process_reel_url(
+    cl: Client,
+    raw_code: str,
+    *,
+    fetch_comments: bool = True,
+    reel_cache: Optional[dict[str, dict]] = None,
+) -> dict:
     """
     Fetch metrics for one reel URL. Always returns a result dict with
     ``status`` of ``Success`` or ``Failed`` so bulk processing can continue.
@@ -718,25 +764,34 @@ def process_reel_url(cl: Client, raw_code: str, *, fetch_comments: bool = True) 
 
     try:
         shortcode = extract_shortcode(raw_code)
-        media_pk = cl.media_pk_from_code(shortcode)
-        m = fetch_single_media(cl, media_pk)
-        result = {
-            "url": original_url,
-            "reel_url": original_url,
-            "shortcode": m.get("shortcode") or shortcode,
-            "caption": m.get("caption") or "",
-            **media_metric_fields(m),
-            "reel_comments": [],
-            "comments_fetched": 0,
-            "comments_note": None,
-            "status": "Success",
-            "error": None,
-        }
-        if fetch_comments:
-            comments, comments_note = fetch_media_comments(cl, media_pk)
-            result["reel_comments"] = comments
-            result["comments_fetched"] = len(comments)
-            result["comments_note"] = comments_note
+        if reel_cache is not None and shortcode in reel_cache:
+            cached = dict(reel_cache[shortcode])
+            cached["url"] = original_url
+            cached["reel_url"] = original_url
+            return cached
+
+        with _scrape_delay(cl, fast=not fetch_comments):
+            media_pk = cl.media_pk_from_code(shortcode)
+            m = fetch_single_media(cl, media_pk)
+            result = {
+                "url": original_url,
+                "reel_url": original_url,
+                "shortcode": m.get("shortcode") or shortcode,
+                "caption": m.get("caption") or "",
+                **media_metric_fields(m),
+                "reel_comments": [],
+                "comments_fetched": 0,
+                "comments_note": None,
+                "status": "Success",
+                "error": None,
+            }
+            if fetch_comments:
+                comments, comments_note = fetch_media_comments(cl, media_pk)
+                result["reel_comments"] = comments
+                result["comments_fetched"] = len(comments)
+                result["comments_note"] = comments_note
+        if reel_cache is not None and result["status"] == "Success":
+            reel_cache[shortcode] = dict(result)
         return result
     except Exception as e:
         base["reel_comments"] = []
@@ -928,8 +983,9 @@ def api_bulk_fetch():
     results = []
     successful = 0
     failed = 0
+    reel_cache: dict[str, dict] = {}
     for raw_url in urls:
-        row = process_reel_url(cl, raw_url, fetch_comments=False)
+        row = process_reel_url(cl, raw_url, fetch_comments=False, reel_cache=reel_cache)
         results.append(row)
         if row["status"] == "Success":
             successful += 1
@@ -969,8 +1025,9 @@ def api_bulk_fetch_stream():
         results = []
         successful = 0
         failed = 0
+        reel_cache: dict[str, dict] = {}
         for i, raw_url in enumerate(urls, start=1):
-            row = process_reel_url(cl, raw_url, fetch_comments=False)
+            row = process_reel_url(cl, raw_url, fetch_comments=False, reel_cache=reel_cache)
             results.append(row)
             if row["status"] == "Success":
                 successful += 1
@@ -1044,8 +1101,9 @@ def api_profile_reels():
             ), 400
 
         # *_v1 endpoints force the mobile API (full counts; bypasses GraphQL).
-        user = cl.user_info_by_username_v1(target)
-        reels_raw = cl.user_clips_v1(user.pk, amount=limit)
+        with _scrape_delay(cl, fast=True):
+            user = cl.user_info_by_username_v1(target)
+            reels_raw = cl.user_clips_v1(user.pk, amount=limit)
 
         # Convert each Media object to a plain dict for the JSON response.
         # We don't make a private_request per reel — that would be 1+N calls
@@ -1087,7 +1145,7 @@ def api_profile_reels():
 
 @app.route("/api/profile_reels_stream", methods=["POST"])
 def api_profile_reels_stream():
-    """Stream profile reels incrementally (metrics only; comments loaded on demand)."""
+    """Stream profile reels incrementally (metrics only; comments on demand)."""
     body = request.get_json(silent=True) or {}
     username = (body.get("username") or "").strip()
     password = (body.get("password") or "")
@@ -1118,7 +1176,8 @@ def api_profile_reels_stream():
                 )
                 return
 
-            user = cl.user_info_by_username_v1(target)
+            with _scrape_delay(cl, fast=True):
+                user = cl.user_info_by_username_v1(target)
 
             yield _sse(
                 "start",
@@ -1138,20 +1197,21 @@ def api_profile_reels_stream():
             )
 
             reels_raw = []
-            for i, media in enumerate(iter_user_clips_v1(cl, user.pk, limit)):
-                reels_raw.append(media)
-                reel_metrics = media_to_reel_metrics(media)
-                current = i + 1
-                yield _sse(
-                    "reel",
-                    {
-                        "index": i,
-                        "current": current,
-                        "total": limit if limit > 0 else None,
-                        "expected": limit if limit > 0 else None,
-                        "reel": reel_metrics,
-                    },
-                )
+            with _scrape_delay(cl, fast=True):
+                for i, media in enumerate(iter_user_clips_v1(cl, user.pk, limit)):
+                    reels_raw.append(media)
+                    reel_metrics = media_to_reel_metrics(media)
+                    current = i + 1
+                    yield _sse(
+                        "reel",
+                        {
+                            "index": i,
+                            "current": current,
+                            "total": limit if limit > 0 else None,
+                            "expected": limit if limit > 0 else None,
+                            "reel": reel_metrics,
+                        },
+                    )
 
             total = len(reels_raw)
             yield _sse(
