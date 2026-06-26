@@ -1,0 +1,1628 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Reel Metrics</title>
+  <style>
+    :root[data-theme="dark"] {
+      --bg: #0a0c10;
+      --card: #12151c;
+      --surface: #161a22;
+      --surface-2: #1c212b;
+      --surface-3: #0f1218;
+      --border: rgba(255, 255, 255, 0.07);
+      --border-strong: rgba(255, 255, 255, 0.12);
+      --text: #eef2f7;
+      --muted: #7d8798;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-glow: rgba(59, 130, 246, 0.18);
+      --ok: #34d399;
+      --ok-bg: rgba(52, 211, 153, 0.1);
+      --ok-border: rgba(52, 211, 153, 0.25);
+      --err: #f87171;
+      --err-bg: rgba(248, 113, 113, 0.1);
+      --err-border: rgba(248, 113, 113, 0.25);
+      --shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+      --toggle-bg: #1c212b;
+      --toggle-icon-color: #7d8798;
+      --input-bg: #0f1218;
+      --hint-code-bg: #1c212b;
+      --debug-bg: #0d1117;
+      --debug-color: #7dd3fc;
+    }
+
+    :root[data-theme="light"] {
+      --bg: #f0f2f5;
+      --card: #ffffff;
+      --surface: #f7f8fa;
+      --surface-2: #eef0f4;
+      --surface-3: #f9fafb;
+      --border: rgba(0, 0, 0, 0.08);
+      --border-strong: rgba(0, 0, 0, 0.13);
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-glow: rgba(37, 99, 235, 0.14);
+      --ok: #059669;
+      --ok-bg: rgba(5, 150, 105, 0.08);
+      --ok-border: rgba(5, 150, 105, 0.22);
+      --err: #dc2626;
+      --err-bg: rgba(220, 38, 38, 0.07);
+      --err-border: rgba(220, 38, 38, 0.2);
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.10);
+      --toggle-bg: #eef0f4;
+      --toggle-icon-color: #6b7280;
+      --input-bg: #ffffff;
+      --hint-code-bg: #eef0f4;
+      --debug-bg: #f3f4f6;
+      --debug-color: #1d4ed8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .app-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 32px 20px 48px;
+    }
+
+    .app-card {
+      width: 100%;
+      max-width: 900px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+
+    /* ---- Header ---- */
+    .app-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 24px 24px 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, #2563eb 0%, #3b82f6 50%, #60a5fa 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+    }
+
+    .brand-icon svg {
+      width: 22px;
+      height: 22px;
+      color: #fff;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 33px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .brand .sub {
+      margin: 2px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .local-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      transition: background 0.2s;
+    }
+
+    .local-badge svg {
+      width: 14px;
+      height: 14px;
+      color: var(--accent);
+    }
+
+    /* ---- Theme Toggle ---- */
+    .theme-toggle {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--toggle-bg);
+      border: 1px solid var(--border-strong);
+      color: var(--toggle-icon-color);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .theme-toggle:hover {
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .theme-toggle svg {
+      width: 17px;
+      height: 17px;
+      transition: opacity 0.15s;
+    }
+
+    .icon-moon {
+      display: block;
+    }
+
+    .icon-sun {
+      display: none;
+    }
+
+    [data-theme="light"] .icon-moon {
+      display: none;
+    }
+
+    [data-theme="light"] .icon-sun {
+      display: block;
+    }
+
+    /* ---- Auth ---- */
+    .auth-section {
+      padding: 20px 24px 0;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 560px) {
+      .row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      margin: 0 0 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .field {
+      margin-bottom: 0;
+    }
+
+    input[type=text],
+    input[type=password],
+    input[type=number] {
+      width: 100%;
+      background: var(--input-bg);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.2s;
+    }
+
+    input[type=text]:focus,
+    input[type=password]:focus,
+    input[type=number]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    input::placeholder {
+      color: var(--muted);
+      opacity: 0.6;
+    }
+
+    .hint {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 12px;
+      line-height: 1.55;
+    }
+
+    .hint svg {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+      margin-top: 1px;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    .hint code {
+      background: var(--hint-code-bg);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    /* ---- Workspace ---- */
+    .workspace {
+      margin: 20px 24px 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      border-left: 3px solid var(--accent);
+      overflow: hidden;
+      transition: background 0.2s;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 0 8px;
+    }
+
+    .tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .tab svg {
+      width: 16px;
+      height: 16px;
+      opacity: 0.65;
+    }
+
+    .tab:hover {
+      color: var(--text);
+    }
+
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .tab.active svg {
+      opacity: 1;
+      color: var(--accent);
+    }
+
+    .pane {
+      display: none;
+      padding: 20px;
+    }
+
+    .pane.active {
+      display: block;
+    }
+
+    /* ---- Segmented toggle ---- */
+    .seg-control {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .seg-opt {
+      flex: 1;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .seg-opt input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .seg-opt span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-3);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+
+    .seg-opt span::before {
+      content: '';
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid var(--border-strong);
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .seg-opt:has(input:checked) span {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+      color: var(--text);
+    }
+
+    .seg-opt:has(input:checked) span::before {
+      border-color: var(--accent);
+      background: var(--accent);
+      box-shadow: inset 0 0 0 3px var(--surface-3);
+    }
+
+    input[type=file] {
+      width: 100%;
+      background: var(--surface-3);
+      color: var(--muted);
+      border: 1px dashed var(--border-strong);
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    input[type=file]::file-selector-button {
+      background: var(--surface-2);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 7px 14px;
+      margin-right: 12px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* ---- Buttons ---- */
+    button {
+      border: 0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 18px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+      font-family: inherit;
+    }
+
+    button:hover {
+      opacity: 0.92;
+    }
+
+    button:active {
+      opacity: 0.85;
+    }
+
+    button[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      transition: background 0.15s;
+    }
+
+    .btn-action:hover {
+      background: var(--surface-2);
+      filter: brightness(0.96);
+      opacity: 1;
+    }
+
+    .btn-action svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+
+    .btn-main {
+      flex: 1;
+      padding: 13px 20px;
+    }
+
+    .btn-secondary-action {
+      flex-shrink: 0;
+      padding: 13px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    .btn-full {
+      width: 100%;
+      margin-top: 18px;
+    }
+
+    .btn-download {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      margin-top: 16px;
+      padding: 13px 20px;
+      width: 100%;
+    }
+
+    .btn-download:hover {
+      filter: brightness(0.96);
+      opacity: 1;
+    }
+
+    /* ---- Profile stat cards ---- */
+    .profile-stats {
+      display: none;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .profile-stats.show {
+      display: grid;
+    }
+
+    @media (max-width: 560px) {
+      .profile-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stat-card {
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 14px 12px;
+      position: relative;
+      overflow: hidden;
+      transition: background 0.2s;
+    }
+
+    .stat-accent {
+      width: 28px;
+      height: 3px;
+      background: var(--accent);
+      border-radius: 2px;
+      margin-bottom: 12px;
+    }
+
+    .stat-card .stat-v {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+    }
+
+    .stat-card .stat-k {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ---- Results ---- */
+    .results {
+      margin-top: 24px;
+      display: none;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+    }
+
+    .results.show {
+      display: block;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin: 0 0 12px;
+    }
+
+    .section-title+.section-title,
+    .grid+.section-title,
+    .kv+.section-title {
+      margin-top: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    @media (max-width: 560px) {
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .metric {
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      transition: background 0.2s;
+    }
+
+    .metric .k {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric .v {
+      font-size: 22px;
+      font-weight: 700;
+      margin-top: 6px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 8px 16px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      transition: background 0.2s;
+    }
+
+    .kv .k {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .kv .v {
+      word-break: break-word;
+      font-size: 13px;
+    }
+
+    .status {
+      margin-top: 14px;
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.err {
+      background: var(--err-bg);
+      border: 1px solid var(--err-border);
+      color: var(--err);
+    }
+
+    .status.ok {
+      background: var(--ok-bg);
+      border: 1px solid var(--ok-border);
+      color: var(--ok);
+    }
+
+    .spinner {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      border-top-color: currentColor;
+      display: inline-block;
+      vertical-align: -2px;
+      animation: sp 0.7s linear infinite;
+    }
+
+    @keyframes sp {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--surface-3);
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    tbody tr:hover {
+      background: rgba(128, 128, 128, 0.04);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 100%;
+    }
+
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+
+    .pill {
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      transition: background 0.2s;
+    }
+
+    .pill b {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .badge.ok {
+      background: var(--ok-bg);
+      color: var(--ok);
+      border: 1px solid var(--ok-border);
+    }
+
+    .badge.err {
+      background: var(--err-bg);
+      color: var(--err);
+      border: 1px solid var(--err-border);
+    }
+
+    .progress-bar-wrap {
+      margin-top: 14px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      display: none;
+      transition: background 0.2s;
+    }
+
+    .progress-bar-wrap.show {
+      display: block;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+
+    .progress-bar-wrap .label {
+      color: var(--muted);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #progress-count {
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .progress-track {
+      height: 4px;
+      background: var(--border-strong);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.2s ease;
+    }
+
+    #progress-pct {
+      margin-top: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #debug-box {
+      display: none;
+      margin-top: 14px;
+      background: var(--debug-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 11px;
+      font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      color: var(--debug-color);
+      max-height: 320px;
+      overflow-y: auto;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .muted-inline {
+      color: var(--muted);
+      font-size: 11px;
+      margin-left: 6px;
+    }
+
+    .muted-inline:empty {
+      display: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    td.err-cell {
+      color: var(--err);
+      font-size: 11px;
+      max-width: 240px;
+      word-break: break-word;
+    }
+
+    td.url-cell {
+      max-width: 260px;
+      word-break: break-all;
+      font-size: 11px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-wrap">
+    <div class="app-card">
+
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+            </svg>
+          </div>
+          <div>
+            <h1>Reel Metrics</h1>
+            <p class="sub">Processed locally on your device</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="local-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            Local only
+          </span>
+          <!-- Theme toggle -->
+          <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+            <!-- Moon (shown in dark mode) -->
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" />
+            </svg>
+            <!-- Sun (shown in light mode) -->
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          </button>
+
+        </div>
+      </header>
+
+      <section class="auth-section">
+        <div class="row">
+          <div class="field">
+            <label for="username">Instagram username</label>
+            <input id="username" name="username" type="text" placeholder="username" autocomplete="username" required />
+          </div>
+          <div class="field">
+            <label for="password">Password (first login only)</label>
+            <input id="password" name="password" type="password" placeholder="••••••••"
+              autocomplete="current-password" />
+          </div>
+        </div>
+        <div class="hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          <span>After your first login, the session is saved so leave the password blank on return visits.</span>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="tabs">
+          <div class="tab active" data-tab="single">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            Single reel
+          </div>
+          <div class="tab" data-tab="profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Profile reels
+          </div>
+        </div>
+
+        <!-- Single Reel pane -->
+        <div class="pane active" id="pane-single">
+          <div class="seg-control" role="radiogroup" aria-label="Processing mode">
+            <label class="seg-opt">
+              <input type="radio" name="single-mode" value="single" checked />
+              <span>Single reel</span>
+            </label>
+            <label class="seg-opt">
+              <input type="radio" name="single-mode" value="bulk" />
+              <span>Multiple reels (CSV)</span>
+            </label>
+          </div>
+
+          <form id="f-single">
+            <div id="single-url-wrap">
+              <label for="shortcode">Reel or post URL</label>
+              <input id="shortcode" name="shortcode" type="text"
+                placeholder="https://www.instagram.com/reel/ABC123xyz/" />
+              <div class="hint">
+                <span>Paste the full link from your browser, or enter just the shortcode.</span>
+              </div>
+            </div>
+
+            <div id="bulk-csv-wrap" class="hidden">
+              <label for="csv-file">CSV file</label>
+              <input id="csv-file" name="csv" type="file" accept=".csv,text/csv" />
+              <div class="hint">
+                <span>Add one reel URL per row, or use a column named <code>url</code>, <code>link</code>, or
+                  <code>reel_url</code>.</span>
+              </div>
+            </div>
+
+            <div class="btn-row" id="single-actions">
+              <button id="go-single" type="submit" class="btn-action btn-main">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+                <span class="btn-label">Fetch metrics</span>
+              </button>
+              <button id="go-debug" type="button" class="btn-action btn-secondary-action">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path
+                    d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+                </svg>
+                <span class="btn-label">Debug raw node</span>
+              </button>
+            </div>
+          </form>
+
+          <div id="progress-bulk" class="progress-bar-wrap">
+            <div class="progress-meta">
+              <div class="label" id="progress-label">Preparing…</div>
+              <span id="progress-count">0 / 0</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div id="progress-pct">0%</div>
+          </div>
+
+          <div id="debug-box"></div>
+          <div id="status-single" class="status"></div>
+
+          <div id="results-single" class="results">
+            <div class="section-title">Reel level metrics</div>
+            <div class="grid" id="single-metrics-grid">
+              <div class="metric">
+                <div class="k">Views (plays)</div>
+                <div class="v" id="m_views">-</div>
+              </div>
+              <div class="metric">
+                <div class="k">Likes</div>
+                <div class="v" id="m_likes">-</div>
+              </div>
+              <div class="metric">
+                <div class="k">Comments</div>
+                <div class="v" id="m_comments">-</div>
+              </div>
+              <div class="metric">
+                <div class="k">Shares</div>
+                <div class="v" id="m_shares">-</div>
+              </div>
+              <div class="metric">
+                <div class="k">Saves</div>
+                <div class="v" id="m_saves">-</div>
+              </div>
+              <div class="metric">
+                <div class="k">Reposts</div>
+                <div class="v" id="m_reposts">-</div>
+              </div>
+            </div>
+
+            <div class="section-title">Post details</div>
+            <div class="kv" id="single-details-kv">
+              <div class="k">Shortcode</div>
+              <div class="v" id="d_shortcode">-</div>
+              <div class="k">Owner</div>
+              <div class="v" id="d_owner">-</div>
+              <div class="k">Date</div>
+              <div class="v" id="d_date">-</div>
+              <div class="k">Is video</div>
+              <div class="v" id="d_video">-</div>
+              <div class="k">Caption</div>
+              <div class="v" id="d_caption">-</div>
+              <div class="k">URL</div>
+              <div class="v"><a id="d_url" href="#" target="_blank" rel="noreferrer">-</a></div>
+            </div>
+          </div>
+
+          <div id="results-bulk" class="results">
+            <div class="section-title">Bulk processing summary</div>
+            <div class="summary">
+              <div class="pill">Total URLs: <b id="b_total">0</b></div>
+              <div class="pill">Successful: <b id="b_success">0</b></div>
+              <div class="pill">Failed: <b id="b_failed">0</b></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Reel URL</th>
+                    <th class="num">Views</th>
+                    <th class="num">Likes</th>
+                    <th class="num">Comments</th>
+                    <th class="num">Shares</th>
+                    <th class="num">Saves</th>
+                    <th class="num">Reposts</th>
+                    <th>Upload date</th>
+                    <th>Status</th>
+                    <th>Error</th>
+                  </tr>
+                </thead>
+                <tbody id="bulk-tbody"></tbody>
+              </table>
+            </div>
+            <button type="button" id="download-csv" class="btn-download">Download CSV</button>
+          </div>
+        </div>
+
+        <!-- Profile Reels pane -->
+        <div class="pane" id="pane-profile">
+          <form id="f-profile">
+            <div class="row">
+              <div class="field">
+                <label for="target">Instagram profile</label>
+                <input id="target" name="target" type="text" placeholder="@username or profile URL" />
+              </div>
+              <div class="field">
+                <label for="limit">Reels to fetch</label>
+                <input id="limit" name="limit" type="text" placeholder="20" value="20" />
+              </div>
+            </div>
+            <div class="hint">
+              <span>Supports @usernames, profile URLs, and reel URLs — the account owner is detected automatically.
+                Higher counts may trigger rate limits.</span>
+            </div>
+            <button id="go-profile" type="submit" class="btn-action btn-full">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span class="btn-label">Fetch profile reels</span>
+            </button>
+          </form>
+
+          <div id="status-profile" class="status"></div>
+
+          <div class="profile-stats" id="profile-stats">
+            <div class="stat-card">
+              <div class="stat-accent"></div>
+              <div class="stat-v" id="ps_reels"></div>
+              <div class="stat-k">Reels fetched</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-accent"></div>
+              <div class="stat-v" id="ps_avg_views"></div>
+              <div class="stat-k">Avg. views</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-accent"></div>
+              <div class="stat-v" id="ps_avg_likes"></div>
+              <div class="stat-k">Avg. likes</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-accent"></div>
+              <div class="stat-v" id="ps_avg_shares"></div>
+              <div class="stat-k">Avg. shares</div>
+            </div>
+          </div>
+
+          <div id="results-profile" class="results">
+            <div class="section-title">Profile</div>
+            <div class="kv">
+              <div class="k">Username</div>
+              <div class="v" id="p_username">-</div>
+              <div class="k">Full name</div>
+              <div class="v" id="p_fullname">-</div>
+              <div class="k">Followers</div>
+              <div class="v" id="p_followers">-</div>
+              <div class="k">Following</div>
+              <div class="v" id="p_following">-</div>
+              <div class="k">Total posts</div>
+              <div class="v" id="p_posts">-</div>
+              <div class="k">Oldest reel</div>
+              <div class="v"><span id="p_oldest">—</span><span class="muted-inline" id="p_oldest_full"></span></div>
+              <div class="k">Latest reel</div>
+              <div class="v"><span id="p_latest">—</span><span class="muted-inline" id="p_latest_full"></span></div>
+              <div class="k">Reel date span</div>
+              <div class="v" id="p_span">—</div>
+            </div>
+
+            <div class="section-title">Reels</div>
+            <div class="summary">
+              <div class="pill">Fetched: <b id="s_count">0</b></div>
+              <div class="pill">Total views: <b id="s_views">0</b></div>
+              <div class="pill">Total likes: <b id="s_likes">0</b></div>
+              <div class="pill">Total comments: <b id="s_comments">0</b></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Date</th>
+                    <th>Shortcode</th>
+                    <th class="num">Views</th>
+                    <th class="num">Likes</th>
+                    <th class="num">Comments</th>
+                    <th>Caption</th>
+                  </tr>
+                </thead>
+                <tbody id="reels-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script>
+    const fmt = (n) => {
+      if (n === null || n === undefined || n === '') return '-';
+      const v = Number(n);
+      return Number.isFinite(v) ? v.toLocaleString() : String(n);
+    };
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
+    // ---- Theme toggle ----
+    const html = document.documentElement;
+    const THEME_KEY = 'reel-metrics-theme';
+
+    function applyTheme(theme) {
+      html.setAttribute('data-theme', theme);
+      localStorage.setItem(THEME_KEY, theme);
+    }
+
+    // Load saved preference (or system default)
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') {
+      applyTheme(saved);
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(prefersDark ? 'dark' : 'light');
+    }
+
+    $('theme-toggle').addEventListener('click', () => {
+      const current = html.getAttribute('data-theme');
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    });
+
+    // ---- Rest of original JS ----
+    let bulkResults = [];
+
+    function isBulkMode() {
+      return document.querySelector('input[name="single-mode"]:checked')?.value === 'bulk';
+    }
+
+    function updateSingleModeUI() {
+      const bulk = isBulkMode();
+      $('single-url-wrap').classList.toggle('hidden', bulk);
+      $('bulk-csv-wrap').classList.toggle('hidden', !bulk);
+      $('go-debug').classList.toggle('hidden', bulk);
+      $('go-single').querySelector('.btn-label').textContent = bulk ? 'Process CSV' : 'Fetch metrics';
+      $('results-single').classList.remove('show');
+      $('results-bulk').classList.remove('show');
+      showStatus($('status-single'), '', '');
+    }
+
+    document.querySelectorAll('input[name="single-mode"]').forEach(r => {
+      r.addEventListener('change', updateSingleModeUI);
+    });
+
+    function csvEscape(val) {
+      const s = val == null ? '' : String(val);
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    }
+
+    function buildResultsCsv(rows) {
+      const headers = ['Reel URL', 'Views', 'Likes', 'Comments', 'Shares', 'Saves', 'Reposts', 'Upload Date', 'Processing Status', 'Error Message'];
+      const lines = [headers.map(csvEscape).join(',')];
+      for (const row of rows) {
+        lines.push([row.url || row.reel_url, row.views ?? '', row.likes ?? '', row.comments ?? '', row.shares ?? '', row.saves ?? '', row.reposts ?? '', row.date ?? '', row.status, row.error ?? ''].map(csvEscape).join(','));
+      }
+      return lines.join('\n');
+    }
+
+    function downloadBulkCsv() {
+      if (!bulkResults.length) return;
+      const blob = new Blob([buildResultsCsv(bulkResults)], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `reel-metrics-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    $('download-csv').addEventListener('click', downloadBulkCsv);
+
+    function renderBulkResults(data) {
+      bulkResults = data.results || [];
+      const summary = data.summary || {};
+      $('b_total').textContent = summary.total ?? bulkResults.length;
+      $('b_success').textContent = summary.successful ?? 0;
+      $('b_failed').textContent = summary.failed ?? 0;
+
+      const tbody = $('bulk-tbody');
+      tbody.innerHTML = '';
+      bulkResults.forEach((row, i) => {
+        const ok = row.status === 'Success';
+        const link = row.url || row.reel_url;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${i + 1}</td><td class="url-cell"><a href="${esc(link)}" target="_blank" rel="noreferrer">${esc(link)}</a></td><td class="num">${fmt(row.views)}</td><td class="num">${fmt(row.likes)}</td><td class="num">${fmt(row.comments)}</td><td class="num">${fmt(row.shares)}</td><td class="num">${fmt(row.saves)}</td><td class="num">${fmt(row.reposts)}</td><td>${esc(row.date) || '-'}</td><td><span class="badge ${ok ? 'ok' : 'err'}">${esc(row.status)}</span></td><td class="err-cell">${esc(row.error) || '—'}</td>`;
+        tbody.appendChild(tr);
+      });
+      $('results-bulk').classList.add('show');
+    }
+
+    document.querySelectorAll('.tab').forEach(t => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        $('pane-' + t.dataset.tab).classList.add('active');
+      });
+    });
+
+    function setBtnLoading(btn, loading, idleText, loadingText) {
+      btn.disabled = loading;
+      const label = btn.querySelector('.btn-label');
+      if (loading) {
+        label.innerHTML = `<span class="spinner"></span>${loadingText || 'Processing…'}`;
+      } else {
+        label.textContent = idleText;
+      }
+    }
+
+    function showStatus(el, kind, msg) {
+      el.className = 'status ' + (kind ? (kind + ' show') : '');
+      el.textContent = msg || '';
+    }
+
+    async function parseJsonResponse(r) {
+      const ct = r.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        if (r.status === 404) throw new Error('API endpoint not found. Restart the server (python test.py) and try again.');
+        throw new Error(`Unexpected server response (HTTP ${r.status}). Restart the server and try again.`);
+      }
+      return r.json();
+    }
+
+    function setBulkProgress(current, total, percent, label) {
+      const pct = Math.max(0, Math.min(100, percent ?? (total ? Math.round(current * 100 / total) : 0)));
+      $('progress-fill').style.width = pct + '%';
+      $('progress-count').textContent = `${current} / ${total}`;
+      $('progress-pct').textContent = pct + '%';
+      if (label) $('progress-label').textContent = label;
+    }
+
+    function truncateUrl(url, max = 72) {
+      const s = String(url || '');
+      return s.length > max ? s.slice(0, max - 1) + '…' : s;
+    }
+
+    async function consumeBulkStream(response, onEvent) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() || '';
+        for (const frame of frames) {
+          if (!frame.trim()) continue;
+          let event = 'message', data = '';
+          for (const line of frame.split('\n')) {
+            if (line.startsWith('event: ')) event = line.slice(7).trim();
+            else if (line.startsWith('data: ')) data = line.slice(6);
+          }
+          if (data) onEvent(event, JSON.parse(data));
+        }
+      }
+      if (buffer.trim()) {
+        let event = 'message', data = '';
+        for (const line of buffer.split('\n')) {
+          if (line.startsWith('event: ')) event = line.slice(7).trim();
+          else if (line.startsWith('data: ')) data = line.slice(6);
+        }
+        if (data) onEvent(event, JSON.parse(data));
+      }
+    }
+
+    function updateProfileStats(reels) {
+      const container = $('profile-stats');
+      const n = reels.length;
+      if (!n) { container.classList.remove('show'); return; }
+      let totViews = 0, totLikes = 0, totShares = 0, shareCount = 0;
+      reels.forEach(r => {
+        totViews += (r.views || 0);
+        totLikes += (r.likes || 0);
+        if (r.shares != null) { totShares += r.shares; shareCount++; }
+      });
+      $('ps_reels').textContent = fmt(n);
+      $('ps_avg_views').textContent = fmt(Math.round(totViews / n));
+      $('ps_avg_likes').textContent = fmt(Math.round(totLikes / n));
+      $('ps_avg_shares').textContent = shareCount ? fmt(Math.round(totShares / shareCount)) : '0';
+      container.classList.add('show');
+    }
+
+    $('f-single').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (isBulkMode()) { await submitBulkCsv(); return; }
+      const btn = $('go-single'), status = $('status-single'), results = $('results-single');
+      showStatus(status, '', '');
+      results.classList.remove('show');
+      $('results-bulk').classList.remove('show');
+      setBtnLoading(btn, true, 'Fetch metrics', 'Fetching…');
+      const payload = { username: $('username').value.trim(), password: $('password').value, shortcode: $('shortcode').value.trim() };
+      if (!payload.shortcode) { showStatus(status, 'err', 'Please enter a reel or post URL.'); setBtnLoading(btn, false, 'Fetch metrics'); return; }
+      try {
+        const r = await fetch('/api/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+          showStatus(status, 'err', 'Error: ' + (data.error || ('HTTP ' + r.status)));
+        } else {
+          $('m_views').textContent = fmt(data.views);
+          $('m_likes').textContent = fmt(data.likes);
+          $('m_comments').textContent = fmt(data.comments);
+          $('m_shares').textContent = fmt(data.shares);
+          $('m_saves').textContent = fmt(data.saves);
+          $('m_reposts').textContent = fmt(data.reposts);
+          $('d_shortcode').textContent = data.shortcode;
+          $('d_owner').textContent = data.owner || '-';
+          $('d_date').textContent = data.date || '-';
+          $('d_video').textContent = data.is_video ? 'Yes' : 'No';
+          $('d_caption').textContent = data.caption || 'No Caption';
+          const url = 'https://www.instagram.com/' + (data.is_video ? 'reel' : 'p') + '/' + data.shortcode + '/';
+          const a = $('d_url'); a.href = url; a.textContent = url;
+          results.classList.add('show');
+          showStatus(status, 'ok', 'Metrics retrieved successfully.');
+        }
+      } catch (err) {
+        showStatus(status, 'err', 'Network error: ' + err.message);
+      } finally {
+        setBtnLoading(btn, false, 'Fetch metrics');
+      }
+    });
+
+    async function submitBulkCsv() {
+      const btn = $('go-single'), status = $('status-single'), progress = $('progress-bulk');
+      showStatus(status, '', '');
+      $('results-single').classList.remove('show');
+      $('results-bulk').classList.remove('show');
+      bulkResults = [];
+      const fileInput = $('csv-file'), file = fileInput.files?.[0];
+      if (!file) { showStatus(status, 'err', 'Please select a CSV file with reel URLs.'); return; }
+      const form = new FormData();
+      form.append('username', $('username').value.trim());
+      form.append('password', $('password').value);
+      form.append('csv', file);
+      setBtnLoading(btn, true, 'Process CSV', 'Processing…');
+      progress.classList.add('show');
+      setBulkProgress(0, 0, 0, 'Uploading CSV file…');
+      showStatus(status, 'ok', 'Processing each URL in your file. Any failures will be listed in the results table.');
+      let finalData = null;
+      try {
+        const r = await fetch('/api/bulk_fetch_stream', { method: 'POST', body: form });
+        const ct = r.headers.get('content-type') || '';
+        if (!r.ok || !ct.includes('text/event-stream')) {
+          const data = await parseJsonResponse(r);
+          showStatus(status, 'err', 'Error: ' + (data.error || ('HTTP ' + r.status)));
+          progress.classList.remove('show');
+          return;
+        }
+        await consumeBulkStream(r, (event, data) => {
+          if (event === 'start') setBulkProgress(0, data.total, 0, `Found ${data.total} URL${data.total === 1 ? '' : 's'} in CSV`);
+          else if (event === 'progress') {
+            const row = data.row || {}, url = row.url || row.reel_url || '', statusWord = row.status === 'Success' ? 'done' : 'failed';
+            setBulkProgress(data.current, data.total, data.percent, `Reel ${data.current} of ${data.total} ${statusWord} — ${truncateUrl(url)}`);
+          } else if (event === 'error') throw new Error(data.error || 'Bulk processing failed.');
+          else if (event === 'complete') { finalData = data; setBulkProgress(data.summary?.total ?? 0, data.summary?.total ?? 0, 100, 'All reels processed'); }
+        });
+        if (!finalData?.ok) {
+          showStatus(status, 'err', 'Error: Processing did not complete.');
+          progress.classList.remove('show');
+        } else {
+          renderBulkResults(finalData);
+          const s = finalData.summary || {};
+          showStatus(status, 'ok', `Finished — ${s.total ?? 0} URL(s) processed: ${s.successful ?? 0} succeeded, ${s.failed ?? 0} failed.`);
+          setTimeout(() => progress.classList.remove('show'), 800);
+        }
+      } catch (err) {
+        showStatus(status, 'err', 'Network error: ' + err.message);
+        progress.classList.remove('show');
+      } finally {
+        setBtnLoading(btn, false, 'Process CSV');
+        if (!finalData?.ok) { $('progress-fill').style.width = '0%'; $('progress-count').textContent = '0 / 0'; $('progress-pct').textContent = '0%'; }
+      }
+    }
+
+    $('go-debug').addEventListener('click', async () => {
+      const btn = $('go-debug'), box = $('debug-box'), label = btn.querySelector('.btn-label');
+      btn.disabled = true; label.textContent = '…';
+      box.style.display = 'none'; box.textContent = '';
+      const payload = { username: $('username').value.trim(), password: $('password').value, shortcode: $('shortcode').value.trim() };
+      try {
+        const r = await fetch('/api/debug_node', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await r.json();
+        box.style.display = 'block';
+        if (!data.ok) {
+          box.style.color = '#fca5a5'; box.textContent = 'Error: ' + data.error;
+        } else {
+          box.style.color = '';
+          const fmtFields = (obj) => Object.entries(obj || {}).map(([k, v]) => `${k.padEnd(50)} = ${JSON.stringify(v)}`).join('\n') || '(none)';
+          box.textContent = `Shortcode : ${data.shortcode}\nOwner     : @${data.owner}\niPhone API available : ${data.iphone_available ? 'YES' : 'NO'}\n${data.iphone_error ? `iPhone API error    : ${data.iphone_error}\n` : ''}\nChosen (what the UI will display):\n  likes    = ${data.chosen_likes}\n  comments = ${data.chosen_comments}\n  views    = ${data.chosen_views}\n\n--- GraphQL ("web" API) count fields ---\n${fmtFields(data.graphql_fields)}\n\n--- iPhone / private API count fields ---\n${fmtFields(data.iphone_fields)}`;
+        }
+      } catch (e) {
+        box.style.display = 'block'; box.style.color = '#fca5a5'; box.textContent = 'Network error: ' + e.message;
+      } finally {
+        btn.disabled = false; label.textContent = 'Debug raw node';
+      }
+    });
+
+    $('f-profile').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('go-profile'), status = $('status-profile'), results = $('results-profile');
+      showStatus(status, '', '');
+      results.classList.remove('show');
+      $('profile-stats').classList.remove('show');
+      setBtnLoading(btn, true, 'Fetch profile reels', 'Fetching…');
+      const limitStr = $('limit').value.trim();
+      const payload = { username: $('username').value.trim(), password: $('password').value, target: $('target').value.trim(), limit: limitStr === '' ? 20 : parseInt(limitStr, 10) || 0 };
+      if (!payload.target) { showStatus(status, 'err', 'Please enter an Instagram username or profile URL.'); setBtnLoading(btn, false, 'Fetch profile reels'); return; }
+      showStatus(status, 'ok', 'Fetching reels from this profile — please wait…');
+      try {
+        const r = await fetch('/api/profile_reels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await r.json();
+        if (!r.ok || !data.ok) {
+          showStatus(status, 'err', 'Error: ' + (data.error || ('HTTP ' + r.status)));
+        } else {
+          $('p_username').textContent = data.profile.username || '-';
+          $('p_fullname').textContent = data.profile.full_name || '-';
+          $('p_followers').textContent = fmt(data.profile.followers);
+          $('p_following').textContent = fmt(data.profile.following);
+          $('p_posts').textContent = fmt(data.profile.posts);
+          const dr = data.date_range || {}, hasDates = dr.count > 0;
+          $('p_oldest').textContent = hasDates ? dr.oldest_date : '—';
+          $('p_oldest_full').textContent = hasDates ? `(${dr.oldest_display})` : '';
+          $('p_latest').textContent = hasDates ? dr.newest_date : '—';
+          $('p_latest_full').textContent = hasDates ? `(${dr.newest_display})` : '';
+          $('p_span').textContent = hasDates ? (dr.span_days === 0 ? `Single day · ${dr.count} reel${dr.count === 1 ? '' : 's'} analyzed` : `${dr.span_days.toLocaleString()} day${dr.span_days === 1 ? '' : 's'} · ${dr.count} reels analyzed`) : '—';
+          updateProfileStats(data.reels);
+          const tbody = $('reels-tbody');
+          tbody.innerHTML = '';
+          if (!data.reels.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No reels found for this profile.</td>`;
+            tbody.appendChild(tr);
+          }
+          let totViews = 0, totLikes = 0, totComments = 0;
+          data.reels.forEach((reel, i) => {
+            totViews += (reel.views || 0); totLikes += (reel.likes || 0); totComments += (reel.comments || 0);
+            const tr = document.createElement('tr');
+            const url = 'https://www.instagram.com/reel/' + reel.shortcode + '/';
+            tr.innerHTML = `<td>${i + 1}</td><td>${reel.date || '-'}</td><td><a href="${url}" target="_blank" rel="noreferrer">${reel.shortcode}</a></td><td class="num">${fmt(reel.views)}</td><td class="num">${fmt(reel.likes)}</td><td class="num">${fmt(reel.comments)}</td><td>${(reel.caption || '').replace(/[<>&]/g, s => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[s]))}</td>`;
+            tbody.appendChild(tr);
+          });
+          $('s_count').textContent = data.reels.length;
+          $('s_views').textContent = fmt(totViews);
+          $('s_likes').textContent = fmt(totLikes);
+          $('s_comments').textContent = fmt(totComments);
+          results.classList.add('show');
+          const resolvedNote = data.resolved_target ? ` (resolved target: @${data.resolved_target})` : '';
+          showStatus(status, 'ok', `Successfully fetched ${data.reels.length} reel${data.reels.length === 1 ? '' : 's'}${resolvedNote}.`);
+        }
+      } catch (err) {
+        showStatus(status, 'err', 'Network error: ' + err.message);
+      } finally {
+        setBtnLoading(btn, false, 'Fetch profile reels');
+      }
+    });
+  </script>
+</body>
+
+</html>
