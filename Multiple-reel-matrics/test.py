@@ -35,7 +35,7 @@ Table of contents (sections below)
     3. URL / shortcode / username parsers
     4. Scraping primitives (single reel, profile, date range)
     5. Error mapping (instagrapi exceptions -> JSON)
-    6. HTTP routes  (/ , /api/fetch , /api/bulk_fetch , /api/bulk_fetch_stream , /api/profile_reels , /api/debug_node)
+    6. HTTP routes  (/ , /api/fetch , /api/reel_comments , /api/bulk_fetch , /api/bulk_fetch_stream , /api/profile_reels , /api/profile_reels_stream , /api/debug_node)
     7. Entry point
 """
 
@@ -465,6 +465,62 @@ def fetch_media_comments(cl: Client, media_pk) -> tuple[list[dict], Optional[str
     return comments, note
 
 
+def reel_dict_without_comments(reel_dict: dict) -> dict:
+    """Return a reel dict with empty comment fields (metrics-only row)."""
+    out = dict(reel_dict)
+    out["reel_comments"] = []
+    out["comments_fetched"] = 0
+    out["comments_note"] = None
+    return out
+
+
+def iter_user_clips_v1(cl: Client, user_id, limit: int = 0, page_size: int = 12):
+    """
+    Yield profile reels page-by-page from Instagram (progressive fetch).
+
+    Uses user_clips_paginated_v1 so callers can process each page as it arrives
+    instead of waiting for user_clips_v1 to download every page first.
+    """
+    next_cursor = ""
+    yielded = 0
+    while True:
+        remaining = None if limit <= 0 else limit - yielded
+        if remaining is not None and remaining <= 0:
+            break
+
+        fetch_amount = page_size if remaining is None else min(page_size, remaining)
+        medias_page, next_cursor = cl.user_clips_paginated_v1(
+            user_id, amount=fetch_amount, end_cursor=next_cursor
+        )
+        if not medias_page:
+            break
+
+        for media in medias_page:
+            yield media
+            yielded += 1
+            if limit > 0 and yielded >= limit:
+                return
+
+        if not next_cursor:
+            break
+
+
+def media_to_reel_metrics(media) -> dict:
+    """Convert a Media object to a metrics-only reel dict for streaming."""
+    try:
+        return reel_dict_without_comments(media_to_dict(media))
+    except Exception as inner:
+        return reel_dict_without_comments({
+            "shortcode": getattr(media, "code", "?"),
+            "date": None,
+            "views": None,
+            "likes": None,
+            "comments": None,
+            "caption": f"[error reading post: {inner}]",
+            "is_video": None,
+        })
+
+
 def attach_reel_comments(cl: Client, media, reel_dict: dict) -> dict:
     """Fetch all Instagram comments for one profile reel and attach them to its dict."""
     out = dict(reel_dict)
@@ -628,7 +684,7 @@ def parse_urls_from_csv(file_bytes: bytes) -> list[str]:
     return urls
 
 
-def process_reel_url(cl: Client, raw_code: str) -> dict:
+def process_reel_url(cl: Client, raw_code: str, *, fetch_comments: bool = True) -> dict:
     """
     Fetch metrics for one reel URL. Always returns a result dict with
     ``status`` of ``Success`` or ``Failed`` so bulk processing can continue.
@@ -647,6 +703,11 @@ def process_reel_url(cl: Client, raw_code: str) -> dict:
         "date": None,
         "status": "Failed",
         "error": None,
+        "shortcode": None,
+        "caption": None,
+        "reel_comments": [],
+        "comments_fetched": 0,
+        "comments_note": None,
     }
     if not raw_code:
         base["error"] = "Empty URL."
@@ -659,14 +720,28 @@ def process_reel_url(cl: Client, raw_code: str) -> dict:
         shortcode = extract_shortcode(raw_code)
         media_pk = cl.media_pk_from_code(shortcode)
         m = fetch_single_media(cl, media_pk)
-        return {
+        result = {
             "url": original_url,
             "reel_url": original_url,
+            "shortcode": m.get("shortcode") or shortcode,
+            "caption": m.get("caption") or "",
             **media_metric_fields(m),
+            "reel_comments": [],
+            "comments_fetched": 0,
+            "comments_note": None,
             "status": "Success",
             "error": None,
         }
+        if fetch_comments:
+            comments, comments_note = fetch_media_comments(cl, media_pk)
+            result["reel_comments"] = comments
+            result["comments_fetched"] = len(comments)
+            result["comments_note"] = comments_note
+        return result
     except Exception as e:
+        base["reel_comments"] = []
+        base["comments_fetched"] = 0
+        base["comments_note"] = None
         base["error"] = error_message_from_exception(e)
         return base
 
@@ -807,6 +882,37 @@ def api_fetch():
         return handle_ig_error(e, what="Reel")
 
 
+@app.route("/api/reel_comments", methods=["POST"])
+def api_reel_comments():
+    """Fetch comments for a single reel on demand (profile / bulk rows)."""
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = (body.get("password") or "")
+    raw_code = (body.get("shortcode") or body.get("url") or "").strip()
+
+    if not username:
+        return jsonify(ok=False, error="Username is required."), 400
+    if not raw_code:
+        return jsonify(ok=False, error="Reel shortcode or URL is required."), 400
+    if not is_valid_media_input(raw_code):
+        return jsonify(ok=False, error="Not a valid Instagram reel/post URL or shortcode."), 400
+
+    try:
+        cl = get_client(username, password or None)
+        shortcode = extract_shortcode(raw_code)
+        media_pk = cl.media_pk_from_code(shortcode)
+        comments, comments_note = fetch_media_comments(cl, media_pk)
+        return jsonify(
+            ok=True,
+            shortcode=shortcode,
+            reel_comments=comments,
+            comments_fetched=len(comments),
+            comments_note=comments_note,
+        )
+    except Exception as e:
+        return handle_ig_error(e, what="Reel")
+
+
 @app.route("/api/bulk_fetch", methods=["POST"])
 def api_bulk_fetch():
     """Process multiple reel URLs from an uploaded CSV (Single Reel bulk mode)."""
@@ -823,7 +929,7 @@ def api_bulk_fetch():
     successful = 0
     failed = 0
     for raw_url in urls:
-        row = process_reel_url(cl, raw_url)
+        row = process_reel_url(cl, raw_url, fetch_comments=False)
         results.append(row)
         if row["status"] == "Success":
             successful += 1
@@ -864,7 +970,7 @@ def api_bulk_fetch_stream():
         successful = 0
         failed = 0
         for i, raw_url in enumerate(urls, start=1):
-            row = process_reel_url(cl, raw_url)
+            row = process_reel_url(cl, raw_url, fetch_comments=False)
             results.append(row)
             if row["status"] == "Success":
                 successful += 1
@@ -947,7 +1053,7 @@ def api_profile_reels():
         reels = []
         for media in reels_raw:
             try:
-                d = attach_reel_comments(cl, media, media_to_dict(media))
+                d = reel_dict_without_comments(media_to_dict(media))
                 reels.append(d)
             except Exception as inner:
                 # One bad reel shouldn't sink the whole fetch.
@@ -977,6 +1083,97 @@ def api_profile_reels():
         )
     except Exception as e:
         return handle_ig_error(e, what=f"Profile '{target or target_raw}'")
+
+
+@app.route("/api/profile_reels_stream", methods=["POST"])
+def api_profile_reels_stream():
+    """Stream profile reels incrementally (metrics only; comments loaded on demand)."""
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = (body.get("password") or "")
+    target_raw = (body.get("target") or "").strip()
+
+    if not username:
+        return jsonify(ok=False, error="Login username is required."), 400
+    if not target_raw:
+        return jsonify(ok=False, error="Target username is required."), 400
+
+    try:
+        limit = max(0, int(body.get("limit", 20)))
+    except (TypeError, ValueError):
+        limit = 20
+
+    @stream_with_context
+    def generate():
+        try:
+            cl = get_client(username, password or None)
+            target = resolve_target_username(cl, target_raw)
+            if not target:
+                yield _sse(
+                    "error",
+                    {
+                        "error": "Could not parse a username from the target field. "
+                        "Enter a plain username (e.g. 'atiazuhair') or a profile URL.",
+                    },
+                )
+                return
+
+            user = cl.user_info_by_username_v1(target)
+
+            yield _sse(
+                "start",
+                {
+                    "resolved_target": target,
+                    "profile": {
+                        "username": user.username,
+                        "full_name": user.full_name,
+                        "followers": user.follower_count,
+                        "following": user.following_count,
+                        "posts": user.media_count,
+                        "is_private": user.is_private,
+                    },
+                    "expected": limit if limit > 0 else None,
+                    "total": None,
+                },
+            )
+
+            reels_raw = []
+            for i, media in enumerate(iter_user_clips_v1(cl, user.pk, limit)):
+                reels_raw.append(media)
+                reel_metrics = media_to_reel_metrics(media)
+                current = i + 1
+                yield _sse(
+                    "reel",
+                    {
+                        "index": i,
+                        "current": current,
+                        "total": limit if limit > 0 else None,
+                        "expected": limit if limit > 0 else None,
+                        "reel": reel_metrics,
+                    },
+                )
+
+            total = len(reels_raw)
+            yield _sse(
+                "complete",
+                {
+                    "ok": True,
+                    "total": total,
+                    "date_range": compute_reel_date_range(reels_raw),
+                },
+            )
+        except Exception as e:
+            yield _sse("error", {"error": error_message_from_exception(e, what="Profile")})
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/debug_node", methods=["POST"])
